@@ -4,20 +4,24 @@
 
 shipready answers that question with a structured, rubric based eval. You write
 a workbook that defines what the agent is for and how to grade it, then grade
-real agent outputs against it. The output is a ship-readiness report card: a
-pass or fail verdict per criterion, with a short justification for each.
+the agent against it. The result is a ship-readiness report card: a pass or fail
+verdict per criterion, with a short justification for each.
 
-This is v0. It ships the workbook format and a Claude driven grading pipeline.
+shipready grades two ways in one tool. Outcome eval scores the agent's final
+output. Process eval scores the agent's behavior through its trace (tool calls,
+reasoning, decisions, escalations), for the many agents whose output is
+open-ended or judgment-dependent. A single workbook can mix both.
 
 ## The three-layer thesis
 
 Most agent evals tell you a number without telling you what the number means.
 shipready is built in three layers so the judgment stays legible.
 
-1. **Workbook layer (shipped in v0).** A per-agent YAML rubric with four parts:
+1. **Workbook layer (shipped).** A per-agent YAML rubric with four parts:
    Goals (what the agent is for), Boundaries (lines it must not cross),
-   Framework (the grading criteria), and a Data Set (the test cases). This is
-   the contract you grade against.
+   Framework (the grading criteria, each targeting the output or the agent's
+   process), and a Data Set (the test cases). This is the contract you grade
+   against.
 
 2. **AI-as-expert-evaluator layer (roadmap).** Synthetic expert reviewer prompts
    that grade like a domain expert when you have no human baseline to compare
@@ -27,7 +31,8 @@ shipready is built in three layers so the judgment stays legible.
    score. Similarity to a human baseline, escalation rate, or a metric you
    define for your domain.
 
-v0 gives you layer 1 plus a basic grader. v1 adds layers 2 and 3.
+Today shipready gives you layer 1, with both outcome and process eval, plus the
+Claude grader. v1 adds layers 2 and 3.
 
 ## Install
 
@@ -46,8 +51,10 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ## Quick start
 
-The repo ships one worked example: a generic research assistant agent. Validate
-the workbook, list its cases, then grade a sample output against case `t1`.
+The repo ships two worked examples: a generic research assistant (outcome eval)
+and a tool-using research assistant (process eval). Start with the first.
+Validate the workbook, list its cases, then grade a sample output against case
+`t1`.
 
 ```
 shipready validate --workbook examples/research_assistant.yaml
