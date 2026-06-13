@@ -21,13 +21,18 @@ from .models import (
 DEFAULT_MODEL = "claude-opus-4-8"
 
 SYSTEM_PROMPT = (
-    "You are an expert evaluator grading whether an AI agent's output meets a "
-    "predefined rubric. Grade strictly against the criteria you are given. For "
+    "You are an expert evaluator grading whether an AI agent's output and "
+    "behavior meet a predefined rubric. Some criteria target the agent's final "
+    "OUTPUT. Other criteria target the agent's PROCESS, which you inspect "
+    "through the supplied trace artifacts (tool calls, reasoning, decisions, "
+    "escalations). Grade each criterion against the artifact it targets. For "
     "each criterion, decide pass or fail and write a one or two sentence "
-    "justification grounded in the agent output. Do not invent criteria that "
-    "were not provided, and do not let a strong result on one criterion excuse "
-    "a failure on another. When the output is missing or empty, fail every "
-    "criterion that depends on content being present."
+    "justification grounded in the relevant artifact. Do not invent criteria "
+    "that were not provided, and do not let a strong result on one criterion "
+    "excuse a failure on another. When a criterion targets the output and the "
+    "output is missing, fail it if content is required. When a criterion "
+    "targets the process and the relevant trace artifact is missing, mark it "
+    "failed with a justification noting the missing trace."
 )
 
 
@@ -62,57 +67,118 @@ def _format_framework(workbook: Workbook) -> str:
     for c in workbook.framework:
         lines.append(f"- id: {c.id}")
         lines.append(f"  criterion: {c.criterion.strip()}")
+        lines.append(f"  target: {c.target}")
         lines.append(f"  grades_what: {c.grades_what.strip()}")
         lines.append(f"  pass means: {c.pass_label}")
         lines.append(f"  fail means: {c.fail_label}")
     return "\n".join(lines)
 
 
+def _format_trace(case: TestCase) -> str:
+    """Render the present trace artifacts as labeled blocks.
+
+    Only non-empty artifacts produce a block, so missing sections leave no
+    empty headers behind. Returns "" when the case carries no trace at all.
+    """
+    blocks = []
+
+    if case.tool_calls:
+        lines = ["TOOL CALLS:"]
+        for tc in case.tool_calls:
+            step = f"step {tc.step}: " if tc.step is not None else ""
+            args = json.dumps(tc.args, ensure_ascii=False) if tc.args else "{}"
+            line = f"- {step}{tc.tool}(args={args})"
+            if tc.returned:
+                line += f" -> returned: {tc.returned.strip()}"
+            lines.append(line)
+        blocks.append("\n".join(lines))
+
+    if case.reasoning_trace and case.reasoning_trace.strip():
+        blocks.append("REASONING TRACE:\n" + case.reasoning_trace.strip())
+
+    if case.decisions_log:
+        lines = ["DECISIONS:"]
+        for d in case.decisions_log:
+            line = f"- [{d.at}] {d.decision}"
+            if d.rationale:
+                line += f" (rationale: {d.rationale.strip()})"
+            lines.append(line)
+        blocks.append("\n".join(lines))
+
+    if case.escalation_events:
+        lines = ["ESCALATIONS:"]
+        for e in case.escalation_events:
+            line = f"- [{e.at}] {e.reason}"
+            if e.handed_off_to:
+                line += f" -> handed off to: {e.handed_off_to}"
+            lines.append(line)
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)
+
+
 def build_user_prompt(
     workbook: Workbook, case: TestCase, agent_output: str
 ) -> str:
-    """Assemble the user message Claude grades. Printed verbatim under verbose."""
+    """Assemble the user message Claude grades. Printed verbatim under verbose.
+
+    Trace artifact sections are rendered only when the workbook has at least one
+    process criterion and the case actually carries the artifact. That keeps
+    output-only workbooks identical to before and avoids empty trace headers.
+    """
     criterion_ids = ", ".join(c.id for c in workbook.framework)
     description = workbook.description.strip()
     case_input = case.input.strip()
     expected = case.expected_behavior.strip()
     notes = case.notes.strip() if case.notes else ""
     output_block = agent_output.strip() or "(the agent produced no output)"
+    has_process = any(c.target == "process" for c in workbook.framework)
     schema_example = (
         '{"grades": [{"criterion_id": "<id>", "passed": true, '
         '"justification": "<one or two sentences>"}]}'
     )
-    return f"""You are grading the output of an AI agent named "{workbook.agent_name}".
 
-Agent purpose: {description}
+    case_block = (
+        f"TEST CASE [{case.id}]\n"
+        f"Input given to the agent:\n{case_input}\n\n"
+        f"Expected behavior:\n{expected}"
+    )
+    if notes:
+        case_block += f"\nNotes: {notes}"
 
-GOALS (what the agent is for):
-{_format_goals(workbook)}
+    sections = [
+        f'You are grading the output and behavior of an AI agent named '
+        f'"{workbook.agent_name}".',
+        f"Agent purpose: {description}",
+        "GOALS (what the agent is for):\n" + _format_goals(workbook),
+        "BOUNDARIES (lines the agent must not cross):\n"
+        + _format_boundaries(workbook),
+        "GRADING FRAMEWORK (score each criterion pass or fail, against its "
+        "target):\n" + _format_framework(workbook),
+        case_block,
+        "AGENT OUTPUT TO GRADE:\n" + output_block,
+    ]
 
-BOUNDARIES (lines the agent must not cross):
-{_format_boundaries(workbook)}
+    if has_process:
+        trace = _format_trace(case)
+        if trace:
+            sections.append(
+                "AGENT TRACE TO INSPECT (for process criteria):\n" + trace
+            )
 
-GRADING FRAMEWORK (score each criterion pass or fail):
-{_format_framework(workbook)}
+    sections.append(
+        "INSTRUCTIONS:\n"
+        "Grade every criterion in the framework against the artifact named by "
+        "its target. You must return a verdict for each of these criterion "
+        f"ids: {criterion_ids}.\n"
+        "Respond with a single JSON object and nothing else, in this shape:\n"
+        f"{schema_example}\n"
+        'Set "passed" to true when the criterion is met and false when it is '
+        "not. Keep each justification to one or two sentences, grounded in the "
+        "relevant artifact."
+    )
 
-TEST CASE [{case.id}]
-Input given to the agent:
-{case_input}
-
-Expected behavior:
-{expected}
-{f"Notes: {notes}" if notes else ""}
-
-AGENT OUTPUT TO GRADE:
-{output_block}
-
-INSTRUCTIONS:
-Grade the agent output against every criterion in the framework. You must
-return a verdict for each of these criterion ids: {criterion_ids}.
-Respond with a single JSON object and nothing else, in this shape:
-{schema_example}
-Set "passed" to true when the criterion is met and false when it is not. Keep
-each justification to one or two sentences and ground it in the agent output."""
+    return "\n\n".join(sections)
 
 
 def render_prompt(workbook: Workbook, case: TestCase, agent_output: str) -> str:
