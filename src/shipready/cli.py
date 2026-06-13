@@ -76,12 +76,18 @@ def cli() -> None:
     help="Print the exact prompt sent to Claude before grading.",
 )
 @click.option(
+    "--dry-run",
+    "dry_run",
+    is_flag=True,
+    help="Print the assembled prompt and exit without calling Claude.",
+)
+@click.option(
     "--json",
     "as_json",
     is_flag=True,
     help="Emit the grading report as JSON instead of a text card.",
 )
-def grade_cmd(workbook_path, case_id, output, output_file, model, verbose, as_json):
+def grade_cmd(workbook_path, case_id, output, output_file, model, verbose, dry_run, as_json):
     """Grade one candidate output for one test case."""
     workbook = _load_or_exit(workbook_path)
     try:
@@ -90,6 +96,11 @@ def grade_cmd(workbook_path, case_id, output, output_file, model, verbose, as_js
         raise click.ClickException(str(exc))
 
     agent_output = _resolve_output(output, output_file, label=f"case {case_id}")
+
+    if dry_run:
+        # Build and print the prompt without spending API credits.
+        click.echo(render_prompt(workbook, case, agent_output))
+        sys.exit(0)
 
     if verbose:
         click.echo(render_prompt(workbook, case, agent_output), err=True)
