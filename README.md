@@ -126,12 +126,18 @@ framework:       # the grading criteria, each scored pass or fail
     grades_what: "..."
     pass_label: well_sourced
     fail_label: weak_sourcing
+    target: output      # output (default) or process
 
 data_set:        # the test cases
   - id: t1
     input: "..."
     expected_behavior: "..."
     notes: "..."
+    # optional trace artifacts, graded by process criteria:
+    # tool_calls: [...]
+    # reasoning_trace: "..."
+    # decisions_log: [...]
+    # escalation_events: [...]
 ```
 
 Goals and boundaries give the grader context. The framework is what actually
@@ -139,8 +145,15 @@ gets scored: each criterion resolves to pass or fail, and a case is ship-ready
 only when every criterion passes. The pass and fail labels in the workbook are
 the canonical labels, so a report never drifts from your rubric wording.
 
-See `examples/research_assistant.yaml` for a complete example with five criteria
-and three test cases, including an adversarial case that probes scope adherence.
+Each criterion has a `target` of `output` (the default) or `process`. A
+`TestCase` may carry optional trace artifacts, `tool_calls`, `reasoning_trace`,
+`decisions_log`, and `escalation_events`, which process criteria are graded
+against. All of these are optional, so v0 output-only workbooks keep working
+unchanged.
+
+See `examples/research_assistant.yaml` for a complete output-only example with
+five criteria and three test cases, and `examples/tool_using_research_assistant.yaml`
+for a process-eval example that mixes both kinds of criteria.
 
 ## How grading works
 
@@ -150,14 +163,50 @@ candidate output. It asks Claude to return a pass or fail verdict per criterion
 with a one or two sentence justification, then parses that into the report. Run
 with `--verbose` to see the full prompt. Nothing about the judgment is hidden.
 
+## Two eval paradigms
+
+shipready supports two ways to grade an agent in one tool:
+
+**Outcome eval.** Grade the agent's final output against rubric criteria. Works
+when the output is evaluable.
+
+**Process eval.** Grade the agent's behavior by inspecting trace artifacts (tool
+calls, reasoning, decisions, escalations). Works when the output is open-ended
+or the correct answer is judgment-dependent. Most production agents need this.
+
+A single workbook can mix both. Mark each criterion with `target: output` or
+`target: process`. A process criterion is graded against the trace; an output
+criterion is graded against the answer.
+
+## Supplying trace artifacts
+
+When using process criteria, supply the agent's trace alongside the output:
+
+```
+shipready grade \
+  --workbook examples/tool_using_research_assistant.yaml \
+  --case t1 \
+  --output-file examples/sample_outputs/tool_using_t1_output.txt \
+  --tool-calls examples/sample_outputs/tool_using_t1_tool_calls.json \
+  --reasoning-trace examples/sample_outputs/tool_using_t1_reasoning.txt
+```
+
+The trace flags are `--tool-calls`, `--reasoning-trace`, `--decisions`, and
+`--escalations`. Artifacts can also be embedded directly on a test case in the
+workbook; a CLI flag overrides the workbook value when both are present. If a
+process criterion has no relevant trace artifact, it fails with a missing-trace
+justification.
+
 ## Roadmap
+
+Process eval ships in 0.1.0. Remaining roadmap:
 
 - **Layer 2: AI-as-expert-evaluator.** Synthetic expert reviewer prompts for
   domains with no human baseline.
 - **Layer 3: headline metric.** A configurable output-fidelity score
   (baseline similarity, escalation rate, or a custom metric).
-- **Adapters.** Run workbooks against agent frameworks and trace formats
-  directly, so you grade real runs without copying outputs by hand.
+- **Adapters.** Native framework integrations that capture traces directly, so
+  you grade real runs without copying artifacts by hand.
 
 ## License
 
