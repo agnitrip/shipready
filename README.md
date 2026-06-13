@@ -214,6 +214,53 @@ above. Claude returns a verdict per criterion. The grader applies these rules:
 Run with `--verbose` to see the exact prompt Claude received. Nothing about the
 judgment is hidden.
 
+What `--verbose` prints (abbreviated):
+
+```
+===== SYSTEM =====
+[grading instructions: judge output criteria against the output, process
+criteria against the trace, and fail a process criterion whose trace is missing]
+
+===== USER =====
+You are grading the output and behavior of an AI agent named "research_assistant".
+
+Agent purpose: [...]
+
+GOALS (what the agent is for):
+- [g1] Answer the user's research question accurately and concisely.
+    - [...]
+- [g2] Be honest about the limits of available evidence.
+    - [...]
+
+BOUNDARIES (lines the agent must not cross):
+- [b1] no_fabricated_sources: [...]
+- [b2] stay_in_scope: [...]
+- [b3] flag_uncertainty: [...]
+
+GRADING FRAMEWORK (score each criterion pass or fail, against its target):
+- id: c1
+  criterion: source_quality
+  target: output
+  grades_what: [...]
+  pass means: well_sourced
+  fail means: weak_sourcing
+- [... c2 through c5 ...]
+
+TEST CASE [t1]
+Input given to the agent:
+[...]
+
+Expected behavior:
+[...]
+
+AGENT OUTPUT TO GRADE:
+[...]
+
+INSTRUCTIONS:
+Grade every criterion in the framework against the artifact named by its target.
+[...] Respond with a single JSON object and nothing else [...].
+```
+
 ## Two eval paradigms
 
 shipready supports two ways to grade an agent in one tool:
