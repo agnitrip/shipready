@@ -357,8 +357,9 @@ shipready grade \
 The trace flags are `--tool-calls`, `--reasoning-trace`, `--decisions`, and
 `--escalations`. Artifacts can also be embedded directly on a test case in the
 workbook; a CLI flag overrides the workbook value when both are present. If a
-process criterion has no relevant trace artifact, it fails with a missing-trace
-justification.
+process criterion is graded with no trace supplied, shipready never lets it pass
+silently: the verdict is downgraded to at most a warn and the justification
+states that it was graded from the output self-report with no trace.
 
 ## Roadmap
 

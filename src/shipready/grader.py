@@ -40,9 +40,10 @@ SYSTEM_PROMPT = (
     "the shortfall, is a warn whose justification names that shortfall; an "
     "unacceptable branch, for example shipping thin and hiding it, fails. When "
     "a criterion targets the output and the output is missing, fail it if "
-    "content is required. When a criterion targets the process and the "
-    "relevant trace artifact is missing, mark it failed with a justification "
-    "noting the missing trace."
+    "content is required. When a criterion targets the process and no trace "
+    "artifact was supplied, you have no trace to inspect; grade from the "
+    "output's self-report, say so in the justification, and never award a "
+    "clean pass that would read as trace-backed."
 )
 
 
@@ -270,6 +271,13 @@ def parse_response(
         if cid is not None:
             by_id[cid] = entry
 
+    has_trace = bool(
+        case.tool_calls
+        or case.reasoning_trace
+        or case.decisions_log
+        or case.escalation_events
+    )
+
     grades: List[CriterionGrade] = []
     missing = []
     for crit in applicable_criteria(workbook, case):
@@ -285,6 +293,19 @@ def parse_response(
                 status = "pass" if legacy else "fail"
             else:
                 status = "fail"
+        justification = str(entry.get("justification", "")).strip()
+
+        # Trace-integrity contract: a process criterion graded with no trace
+        # must carry a visible signal, never a silent pass that reads as
+        # trace-backed. Downgrade a clean pass to warn and name the missing
+        # trace in the justification.
+        if crit.target == "process" and not has_trace:
+            if status == "pass":
+                status = "warn"
+            if "no trace" not in justification.lower() and "self-report" not in justification.lower():
+                note = "Graded from the output self-report; no trace was supplied."
+                justification = f"{note} {justification}".strip()
+
         label = crit.fail_label if status == "fail" else crit.pass_label
         grades.append(
             CriterionGrade(
@@ -293,7 +314,7 @@ def parse_response(
                 severity=crit.severity,
                 status=status,
                 label=label,
-                justification=str(entry.get("justification", "")).strip(),
+                justification=justification,
             )
         )
 

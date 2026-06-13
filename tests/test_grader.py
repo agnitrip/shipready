@@ -366,3 +366,34 @@ def test_applies_to_includes_matching_branch():
         client=StubClient(_status_payload({"c1": "pass", "c2": "pass"})),
     )
     assert {g.criterion_id for g in report.grades} == {"c1", "c2"}
+
+
+def test_process_no_trace_never_silent_passes():
+    # A process criterion graded with no trace must not pass silently.
+    case = TestCase(id="t1", input="q", expected_behavior="b")  # no trace
+    wb = _process_workbook(case)
+    report = grade(
+        wb, case, "o", model="m",
+        client=StubClient(_status_payload({"p1": "pass", "o1": "pass"})),
+    )
+    p1 = next(g for g in report.grades if g.criterion_id == "p1")
+    assert p1.status == "warn"
+    assert "no trace" in p1.justification.lower() or "self-report" in p1.justification.lower()
+    # The output criterion is unaffected by the trace-integrity rule.
+    o1 = next(g for g in report.grades if g.criterion_id == "o1")
+    assert o1.status == "pass"
+
+
+def test_process_with_trace_pass_stands():
+    case = TestCase(
+        id="t1", input="q", expected_behavior="b",
+        tool_calls=[ToolCall(tool="web_search", args={}, step=1)],
+    )
+    wb = _process_workbook(case)
+    report = grade(
+        wb, case, "o", model="m",
+        client=StubClient(_status_payload({"p1": "pass", "o1": "pass"})),
+    )
+    p1 = next(g for g in report.grades if g.criterion_id == "p1")
+    assert p1.status == "pass"
+    assert "no trace" not in p1.justification.lower()
