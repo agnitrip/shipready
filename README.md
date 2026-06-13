@@ -32,7 +32,7 @@ v0 gives you layer 1 plus a basic grader. v1 adds layers 2 and 3.
 ## Install
 
 ```
-git clone https://github.com/agnitripathi/shipready.git
+git clone https://github.com/agnitrip/shipready.git
 cd shipready
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
