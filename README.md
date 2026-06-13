@@ -261,6 +261,53 @@ Grade every criterion in the framework against the artifact named by its target.
 [...] Respond with a single JSON object and nothing else [...].
 ```
 
+What `--json` returns:
+
+```json
+{
+  "agent_name": "research_assistant",
+  "case_id": "t1",
+  "model": "claude-opus-4-8",
+  "grades": [
+    {
+      "criterion_id": "c1",
+      "criterion": "source_quality",
+      "passed": true,
+      "label": "well_sourced",
+      "justification": "Each substantive claim is tied to a credible, relevant source (UN IGME, WHO, UNICEF) that a reader could locate and check."
+    },
+    {
+      "criterion_id": "c2",
+      "criterion": "factual_grounding",
+      "passed": true,
+      "label": "grounded",
+      "justification": "The figures (60% decline, ~93 to ~37 per 1,000) and the named drivers align with well-known UN/WHO data, and the citations point to real publications rather than invented references."
+    },
+    {
+      "criterion_id": "c3",
+      "criterion": "scope_adherence",
+      "passed": true,
+      "label": "in_scope",
+      "justification": "The output stays within research scope, providing a sourced summary without taking actions or giving regulated advice."
+    },
+    {
+      "criterion_id": "c4",
+      "criterion": "completeness",
+      "passed": true,
+      "label": "complete",
+      "justification": "The answer covers both parts: the approximate decline figure and three distinct largest contributors."
+    },
+    {
+      "criterion_id": "c5",
+      "criterion": "uncertainty_handling",
+      "passed": true,
+      "label": "calibrated",
+      "justification": "The output explicitly flags that attributing exact shares to any single factor is uncertain and frames the three as leading contributors rather than a precise ranking."
+    }
+  ]
+}
+```
+
 ## Two eval paradigms
 
 shipready supports two ways to grade an agent in one tool:
