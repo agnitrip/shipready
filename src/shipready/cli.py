@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 import click
+from anthropic import APIConnectionError, AuthenticationError, RateLimitError
 
 from . import __version__
 from .grader import DEFAULT_MODEL, GradingError, grade, render_prompt
@@ -105,11 +107,29 @@ def grade_cmd(workbook_path, case_id, output, output_file, model, verbose, dry_r
     if verbose:
         click.echo(render_prompt(workbook, case, agent_output), err=True)
 
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise click.ClickException(
+            "ANTHROPIC_API_KEY is not set. See the README install section for setup."
+        )
+
     try:
         report = grade(workbook, case, agent_output, model=model)
     except GradingError as exc:
         raise click.ClickException(f"grading failed: {exc}")
-    except Exception as exc:  # surface API and auth errors cleanly
+    except AuthenticationError:
+        raise click.ClickException(
+            "ANTHROPIC_API_KEY is invalid (authentication failed). "
+            "See the README install section for setup."
+        )
+    except RateLimitError:
+        raise click.ClickException(
+            "Claude API rate limit reached. Wait a moment and retry."
+        )
+    except APIConnectionError:
+        raise click.ClickException(
+            "Could not reach the Claude API. Check your network connection and retry."
+        )
+    except Exception as exc:  # any other API or runtime error
         raise click.ClickException(f"Claude API call failed: {exc}")
 
     if as_json:
