@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
 import click
 from anthropic import APIConnectionError, AuthenticationError, RateLimitError
+from pydantic import ValidationError
 
 from . import __version__
 from .grader import DEFAULT_MODEL, GradingError, grade, render_prompt
+from .models import TestCase
 from .report import format_report
 from .workbook import WorkbookError, load_workbook
 
@@ -19,6 +22,55 @@ def _load_or_exit(workbook_path: str):
         return load_workbook(workbook_path)
     except WorkbookError as exc:
         raise click.ClickException(str(exc))
+
+
+def _read_text_file(path: str, label: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read()
+    except OSError as exc:
+        raise click.ClickException(f"could not read {label} file: {exc}")
+
+
+def _load_json_list(path: str, label: str) -> list:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"{label} file is not valid JSON: {exc}")
+    except OSError as exc:
+        raise click.ClickException(f"could not read {label} file: {exc}")
+    if not isinstance(data, list):
+        raise click.ClickException(f"{label} file must contain a JSON array")
+    return data
+
+
+def _attach_trace(case: TestCase, tool_calls, reasoning_trace, decisions, escalations) -> TestCase:
+    """Attach trace artifacts from CLI files onto the test case.
+
+    Supplied flags override any artifact the workbook already carried for this
+    case. The merged case is re-validated so malformed trace data fails with a
+    clean message.
+    """
+    overrides = {}
+    if tool_calls is not None:
+        overrides["tool_calls"] = _load_json_list(tool_calls, "--tool-calls")
+    if reasoning_trace is not None:
+        overrides["reasoning_trace"] = _read_text_file(reasoning_trace, "--reasoning-trace")
+    if decisions is not None:
+        overrides["decisions_log"] = _load_json_list(decisions, "--decisions")
+    if escalations is not None:
+        overrides["escalation_events"] = _load_json_list(escalations, "--escalations")
+
+    if not overrides:
+        return case
+
+    data = case.model_dump()
+    data.update(overrides)
+    try:
+        return TestCase.model_validate(data)
+    except ValidationError as exc:
+        raise click.ClickException(f"trace artifact failed validation:\n{exc}")
 
 
 def _resolve_output(output: str, output_file, label: str) -> str:
@@ -67,6 +119,32 @@ def cli() -> None:
     help="Path to a file holding the candidate agent output.",
 )
 @click.option(
+    "--tool-calls",
+    "tool_calls",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Path to a JSON file with the tool call trace (process eval).",
+)
+@click.option(
+    "--reasoning-trace",
+    "reasoning_trace",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Path to a text file with the agent's reasoning (process eval).",
+)
+@click.option(
+    "--decisions",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Path to a JSON file with the decisions log (process eval).",
+)
+@click.option(
+    "--escalations",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Path to a JSON file with escalation events (process eval).",
+)
+@click.option(
     "--model",
     default=DEFAULT_MODEL,
     show_default=True,
@@ -89,13 +167,28 @@ def cli() -> None:
     is_flag=True,
     help="Emit the grading report as JSON instead of a text card.",
 )
-def grade_cmd(workbook_path, case_id, output, output_file, model, verbose, dry_run, as_json):
+def grade_cmd(
+    workbook_path,
+    case_id,
+    output,
+    output_file,
+    tool_calls,
+    reasoning_trace,
+    decisions,
+    escalations,
+    model,
+    verbose,
+    dry_run,
+    as_json,
+):
     """Grade one candidate output for one test case."""
     workbook = _load_or_exit(workbook_path)
     try:
         case = workbook.case(case_id)
     except KeyError as exc:
         raise click.ClickException(str(exc))
+
+    case = _attach_trace(case, tool_calls, reasoning_trace, decisions, escalations)
 
     agent_output = _resolve_output(output, output_file, label=f"case {case_id}")
 
