@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.1 (2026-06-12)
+
+Documentation transparency polish.
+
+- New section: "What shipready grades" with a structured inputs, context,
+  scored, and outputs breakdown.
+- Expanded "How a criterion gets graded" subsection consolidating the grading
+  rules.
+- Sample --verbose prompt fragment in the README.
+- Sample --json output block in the README.
+
 ## 0.1.0 (2026-06-12)
 
 Process-based eval support (Path A).
