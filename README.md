@@ -162,6 +162,38 @@ See `examples/research_assistant.yaml` for a complete output-only example with
 five criteria and three test cases, and `examples/tool_using_research_assistant.yaml`
 for a process-eval example that mixes both kinds of criteria.
 
+## What shipready grades
+
+For each test case, shipready sends Claude a fixed set of inputs, and only the
+framework criteria are actually scored.
+
+**Inputs the grader sees:**
+
+- Agent name and one-line description.
+- Workbook goals, with sub-goals.
+- Workbook boundaries (name, what-it-means, example).
+- Workbook framework: each criterion with its `target` (output or process).
+- The test case input and expected behavior.
+- The candidate agent output.
+- Trace artifacts if supplied: `tool_calls`, `reasoning_trace`,
+  `decisions_log`, `escalation_events`.
+
+**What is context (used but not scored directly):**
+
+- Goals, boundaries, expected behavior, and the test case input. These help the
+  grader understand why a criterion exists. They are not graded themselves.
+
+**What is scored:**
+
+- Every criterion in the framework. Each criterion has a target. Output criteria
+  are graded against the candidate output. Process criteria are graded against
+  the relevant trace artifact.
+
+**What Claude returns (parsed into the report):**
+
+- For each criterion: pass or fail, plus a one or two sentence justification
+  grounded in the artifact it targeted.
+
 ## How grading works
 
 For each test case, shipready builds a prompt that contains the workbook goals,
