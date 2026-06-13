@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `--summary` flag on grade. Adds a PM-facing summary block (what went well,
+  flags, optional watch item, one-line verdict) above the report card, and a
+  `summary` field in `--json` output. It is a second Claude call, so it doubles
+  the API cost of a grade, and falls back to the bare report on failure. Off by
+  default.
+
 ## 0.1.1 (2026-06-12)
 
 Documentation transparency polish.

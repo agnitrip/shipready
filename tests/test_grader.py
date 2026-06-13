@@ -21,6 +21,7 @@ from shipready import (
     format_report,
     grade,
     load_workbook,
+    summarize,
 )
 from shipready.grader import _extract_json, build_user_prompt, parse_response
 
@@ -179,3 +180,65 @@ def test_criterion_target_labeled_in_prompt():
     prompt = build_user_prompt(_process_workbook(case), case, "answer")
     assert "target: process" in prompt
     assert "target: output" in prompt
+
+
+_SUMMARY_PAYLOAD = {
+    "went_well": ["sources are solid", "stayed in scope"],
+    "flags": ["uncertainty handling was borderline"],
+    "watch": [],
+    "verdict": "SHIP-READY: all criteria passed.",
+}
+
+
+def test_summarize_with_stub():
+    wb = load_workbook(EXAMPLE)
+    report = grade(
+        wb, wb.case("t1"), "out", model="m", client=StubClient(_all_pass_payload(wb))
+    )
+    summary = summarize(
+        wb, wb.case("t1"), report, model="m", client=StubClient(_SUMMARY_PAYLOAD)
+    )
+    assert summary.verdict.startswith("SHIP-READY")
+    assert len(summary.went_well) == 2
+    assert summary.watch == []
+
+
+def test_summary_prepended_to_report_card():
+    wb = load_workbook(EXAMPLE)
+    report = grade(
+        wb, wb.case("t1"), "out", model="m", client=StubClient(_all_pass_payload(wb))
+    )
+    assert "SUMMARY" not in format_report(report)
+    report.summary = summarize(
+        wb, wb.case("t1"), report, model="m", client=StubClient(_SUMMARY_PAYLOAD)
+    )
+    card = format_report(report)
+    assert "SUMMARY" in card
+    assert card.index("SUMMARY") < card.index("shipready report")
+
+
+def test_summary_omitted_from_json_when_absent():
+    wb = load_workbook(EXAMPLE)
+    report = grade(
+        wb, wb.case("t1"), "out", model="m", client=StubClient(_all_pass_payload(wb))
+    )
+    assert "summary" not in json.loads(report.model_dump_json(exclude_none=True))
+
+
+def test_summarize_bad_json_raises():
+    wb = load_workbook(EXAMPLE)
+    report = grade(
+        wb, wb.case("t1"), "out", model="m", client=StubClient(_all_pass_payload(wb))
+    )
+
+    class BadClient:
+        def __init__(self):
+            self.messages = SimpleNamespace(create=self._create)
+
+        def _create(self, **kwargs):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="not json at all")]
+            )
+
+    with pytest.raises(GradingError):
+        summarize(wb, wb.case("t1"), report, model="m", client=BadClient())

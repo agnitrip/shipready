@@ -11,7 +11,7 @@ from anthropic import APIConnectionError, AuthenticationError, RateLimitError
 from pydantic import ValidationError
 
 from . import __version__
-from .grader import DEFAULT_MODEL, GradingError, grade, render_prompt
+from .grader import DEFAULT_MODEL, GradingError, grade, render_prompt, summarize
 from .models import TestCase
 from .report import format_report
 from .workbook import WorkbookError, load_workbook
@@ -162,6 +162,12 @@ def cli() -> None:
     help="Print the assembled prompt and exit without calling Claude.",
 )
 @click.option(
+    "--summary",
+    is_flag=True,
+    help="Add a PM-facing summary block (makes a second Claude call, so this "
+    "doubles the API cost of a grade).",
+)
+@click.option(
     "--json",
     "as_json",
     is_flag=True,
@@ -179,6 +185,7 @@ def grade_cmd(
     model,
     verbose,
     dry_run,
+    summary,
     as_json,
 ):
     """Grade one candidate output for one test case."""
@@ -225,8 +232,18 @@ def grade_cmd(
     except Exception as exc:  # any other API or runtime error
         raise click.ClickException(f"Claude API call failed: {exc}")
 
+    if summary:
+        # A second Claude call. Fall back to the bare report if it fails.
+        try:
+            report.summary = summarize(workbook, case, report, model=model)
+        except Exception as exc:
+            click.echo(
+                f"warning: summary synthesis failed, showing the bare report: {exc}",
+                err=True,
+            )
+
     if as_json:
-        click.echo(report.model_dump_json(indent=2))
+        click.echo(report.model_dump_json(indent=2, exclude_none=True))
     else:
         click.echo(format_report(report))
 

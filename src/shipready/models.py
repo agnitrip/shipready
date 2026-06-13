@@ -153,6 +153,19 @@ class CriterionGrade(BaseModel):
     justification: str
 
 
+class Summary(BaseModel):
+    """PM-facing synthesis of a grading report from a second grading pass.
+
+    Short bullets only. This is the legible artifact a reader skims, not a
+    re-narration of the per-criterion justifications.
+    """
+
+    went_well: List[str] = Field(default_factory=list)
+    flags: List[str] = Field(default_factory=list)
+    watch: List[str] = Field(default_factory=list)
+    verdict: str
+
+
 class GradingReport(BaseModel):
     """The full set of criterion verdicts for one graded output."""
 
@@ -160,6 +173,7 @@ class GradingReport(BaseModel):
     case_id: str
     model: str
     grades: List[CriterionGrade]
+    summary: Optional[Summary] = None
 
     @property
     def passed_count(self) -> int:

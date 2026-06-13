@@ -14,6 +14,7 @@ from typing import List, Optional
 from .models import (
     CriterionGrade,
     GradingReport,
+    Summary,
     TestCase,
     Workbook,
 )
@@ -309,3 +310,94 @@ def grade(
         raise GradingError("model returned an empty response")
 
     return parse_response(workbook, case, text, model)
+
+
+SUMMARY_SYSTEM_PROMPT = (
+    "You are a product manager writing a short, legible summary of an agent "
+    "ship-readiness grading. You are given the per-criterion verdicts and "
+    "justifications. Do not re-narrate them. Produce a tight summary with short "
+    "bullets, each one short sentence. Ground every bullet in the verdicts you "
+    "were given. Respond with a single JSON object and nothing else, in this "
+    "shape: "
+    '{"went_well": ["..."], "flags": ["..."], "watch": ["..."], '
+    '"verdict": "..."}. '
+    "went_well: 3 to 4 bullets drawn from the criteria that passed. "
+    "flags: 1 to 3 bullets surfacing the passes closest to the threshold, any "
+    "soft or borderline results, and notable patterns. "
+    "watch: at most one bullet for something genuinely useful to watch in "
+    "future runs that does not fit above; use an empty list if there is "
+    "nothing. "
+    "verdict: one sentence that states the headline reason for the outcome."
+)
+
+
+def build_summary_prompt(
+    workbook: Workbook, case: TestCase, report: GradingReport
+) -> str:
+    """Assemble the synthesis prompt from the per-criterion grading report."""
+    status = "SHIP-READY" if report.ship_ready else "NOT SHIP-READY"
+    lines = []
+    for g in report.grades:
+        crit = workbook.criterion(g.criterion_id)
+        mark = "PASS" if g.passed else "FAIL"
+        lines.append(
+            f"- [{mark}] {g.criterion_id} {g.criterion} "
+            f"(target: {crit.target}, label: {g.label}): {g.justification}"
+        )
+    grade_block = "\n".join(lines)
+
+    return f"""Agent: {workbook.agent_name}
+Agent purpose: {workbook.description.strip()}
+
+Test case [{case.id}] input:
+{case.input.strip()}
+
+Expected behavior:
+{case.expected_behavior.strip()}
+
+Per-criterion results ({report.passed_count}/{report.total_count} passed):
+{grade_block}
+
+Overall outcome: {status}.
+Your verdict sentence must state {status} and the headline reason. Write the
+summary as JSON in the shape described."""
+
+
+def summarize(
+    workbook: Workbook,
+    case: TestCase,
+    report: GradingReport,
+    model: str = DEFAULT_MODEL,
+    client: Optional[object] = None,
+    max_tokens: int = 1000,
+) -> Summary:
+    """Make a second Claude call to synthesize a PM-facing summary.
+
+    This is a separate API call from grade, so using it doubles the per-grade
+    API cost. Raises GradingError if the response cannot be parsed.
+    """
+    if client is None:
+        from anthropic import Anthropic
+
+        client = Anthropic()
+
+    response = client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        system=SUMMARY_SYSTEM_PROMPT,
+        messages=[
+            {"role": "user", "content": build_summary_prompt(workbook, case, report)}
+        ],
+    )
+
+    text = "".join(
+        block.text for block in response.content if getattr(block, "type", None) == "text"
+    )
+    if not text.strip():
+        raise GradingError("summary model returned an empty response")
+
+    data = _extract_json(text)
+    try:
+        return Summary.model_validate(data)
+    except Exception as exc:
+        raise GradingError(f"could not parse summary response: {exc}") from exc

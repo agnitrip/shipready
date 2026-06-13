@@ -308,6 +308,24 @@ What `--json` returns:
 }
 ```
 
+## PM-facing summary
+
+Add `--summary` to prepend a short summary block above the report card: what
+went well, flags or warnings, an optional thing to watch, and a one-line
+verdict. This is the legible artifact a reviewer skims instead of reading every
+per-criterion justification.
+
+```
+shipready grade --workbook examples/research_assistant.yaml --case t1 \
+  --output-file examples/sample_outputs/research_assistant_t1_good.txt --summary
+```
+
+The summary is a second Claude call on top of the grading call, so `--summary`
+doubles the API cost of a grade. If the synthesis call fails, shipready prints a
+warning and falls back to the bare report. With `--json`, the summary is added
+under a `summary` field with `went_well`, `flags`, `watch`, and `verdict`. Off
+by default.
+
 ## Two eval paradigms
 
 shipready supports two ways to grade an agent in one tool:
