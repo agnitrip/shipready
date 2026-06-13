@@ -322,3 +322,47 @@ def test_legacy_passed_bool_still_parses():
     report = parse_response(wb, wb.data_set[0], response, "m")
     assert report.grades[0].status == "pass"
     assert report.grades[1].status == "fail"
+
+
+def _scoped_workbook(expected_verdict):
+    return Workbook(
+        agent_name="dec",
+        description="d",
+        framework=[
+            Criterion(
+                id="c1", criterion="always", grades_what="x",
+                pass_label="p", fail_label="f",
+            ),
+            Criterion(
+                id="c2", criterion="stub_only", grades_what="y",
+                pass_label="p", fail_label="f", applies_to=["stub"],
+            ),
+        ],
+        data_set=[
+            TestCase(
+                id="t1", input="q", expected_behavior="b",
+                expected_verdict=expected_verdict,
+            )
+        ],
+    )
+
+
+def test_applies_to_excludes_nonmatching_branch():
+    wb = _scoped_workbook("produce")
+    case = wb.data_set[0]
+    # Only c1 applies; grading only c1 must not raise a missing-c2 error.
+    report = grade(wb, case, "out", model="m", client=StubClient(_status_payload({"c1": "pass"})))
+    assert [g.criterion_id for g in report.grades] == ["c1"]
+    prompt = build_user_prompt(wb, case, "out")
+    assert "id: c2" not in prompt
+    assert "Expected verdict (decision branch): produce" in prompt
+
+
+def test_applies_to_includes_matching_branch():
+    wb = _scoped_workbook("stub")
+    case = wb.data_set[0]
+    report = grade(
+        wb, case, "out", model="m",
+        client=StubClient(_status_payload({"c1": "pass", "c2": "pass"})),
+    )
+    assert {g.criterion_id for g in report.grades} == {"c1", "c2"}

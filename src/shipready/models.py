@@ -56,6 +56,12 @@ class Criterion(BaseModel):
     severity controls whether a fail blocks ship-readiness. "hard" (the
     default) means a fail blocks. "soft" means a fail surfaces in the report
     but does not block the verdict.
+
+    applies_to scopes a criterion to specific expected branches. When set, the
+    criterion is graded only when the test case's expected_verdict is in the
+    list (for example a stub-completeness criterion that applies only when
+    expected_verdict is "stub"). When None (the default) the criterion always
+    applies.
     """
 
     id: str
@@ -65,6 +71,7 @@ class Criterion(BaseModel):
     fail_label: str
     target: Literal["output", "process"] = "output"
     severity: Literal["hard", "soft"] = "hard"
+    applies_to: Optional[List[str]] = None
 
 
 class ToolCall(BaseModel):
@@ -98,12 +105,18 @@ class TestCase(BaseModel):
     The optional process artifact fields hold the agent's trace for this case.
     They are graded by criteria whose target is "process". All are optional so
     output-only workbooks stay valid.
+
+    expected_verdict is an agent-defined free string naming the branch the
+    agent was expected to take (for example "produce", "refuse", or "stub").
+    It scopes criteria via their applies_to and gives decision criteria the
+    expected branch to grade against.
     """
 
     id: str
     input: str
     expected_behavior: str
     notes: Optional[str] = None
+    expected_verdict: Optional[str] = None
     tool_calls: Optional[List[ToolCall]] = None
     reasoning_trace: Optional[str] = None
     decisions_log: Optional[List[Decision]] = None

@@ -33,16 +33,34 @@ SYSTEM_PROMPT = (
     "acceptable but carries a caveat the reader must see; on a warn the "
     "justification must name that caveat. fail means the criterion is not met. "
     "Do not invent criteria that were not provided, and do not let a strong "
-    "result on one criterion excuse a failure on another. When a criterion "
-    "targets the output and the output is missing, fail it if content is "
-    "required. When a criterion targets the process and the relevant trace "
-    "artifact is missing, mark it failed with a justification noting the "
-    "missing trace."
+    "result on one criterion excuse a failure on another. For a decision or "
+    "ship-versus-stub criterion, judge the branch the agent took against the "
+    "expected branch: a clean correct branch passes; an acceptable but "
+    "degraded branch, for example shipping on thin evidence while disclosing "
+    "the shortfall, is a warn whose justification names that shortfall; an "
+    "unacceptable branch, for example shipping thin and hiding it, fails. When "
+    "a criterion targets the output and the output is missing, fail it if "
+    "content is required. When a criterion targets the process and the "
+    "relevant trace artifact is missing, mark it failed with a justification "
+    "noting the missing trace."
 )
 
 
 class GradingError(Exception):
     """Raised when Claude's response cannot be parsed into a complete report."""
+
+
+def applicable_criteria(workbook: Workbook, case: TestCase):
+    """Criteria that apply to this case given its expected_verdict.
+
+    A criterion with no applies_to always applies. One with applies_to applies
+    only when the case's expected_verdict is in that list.
+    """
+    result = []
+    for c in workbook.framework:
+        if c.applies_to is None or case.expected_verdict in c.applies_to:
+            result.append(c)
+    return result
 
 
 def _format_goals(workbook: Workbook) -> str:
@@ -67,9 +85,9 @@ def _format_boundaries(workbook: Workbook) -> str:
     return "\n".join(lines)
 
 
-def _format_framework(workbook: Workbook) -> str:
+def _format_framework(criteria) -> str:
     lines = []
-    for c in workbook.framework:
+    for c in criteria:
         lines.append(f"- id: {c.id}")
         lines.append(f"  criterion: {c.criterion.strip()}")
         lines.append(f"  target: {c.target}")
@@ -131,13 +149,14 @@ def build_user_prompt(
     process criterion and the case actually carries the artifact. That keeps
     output-only workbooks identical to before and avoids empty trace headers.
     """
-    criterion_ids = ", ".join(c.id for c in workbook.framework)
+    criteria = applicable_criteria(workbook, case)
+    criterion_ids = ", ".join(c.id for c in criteria)
     description = workbook.description.strip()
     case_input = case.input.strip()
     expected = case.expected_behavior.strip()
     notes = case.notes.strip() if case.notes else ""
     output_block = agent_output.strip() or "(the agent produced no output)"
-    has_process = any(c.target == "process" for c in workbook.framework)
+    has_process = any(c.target == "process" for c in criteria)
     schema_example = (
         '{"grades": [{"criterion_id": "<id>", "status": "pass | warn | fail", '
         '"justification": "<one or two sentences>"}]}'
@@ -148,6 +167,8 @@ def build_user_prompt(
         f"Input given to the agent:\n{case_input}\n\n"
         f"Expected behavior:\n{expected}"
     )
+    if case.expected_verdict:
+        case_block += f"\nExpected verdict (decision branch): {case.expected_verdict}"
     if notes:
         case_block += f"\nNotes: {notes}"
 
@@ -159,7 +180,7 @@ def build_user_prompt(
         "BOUNDARIES (lines the agent must not cross):\n"
         + _format_boundaries(workbook),
         "GRADING FRAMEWORK (score each criterion pass or fail, against its "
-        "target):\n" + _format_framework(workbook),
+        "target):\n" + _format_framework(criteria),
         case_block,
         "AGENT OUTPUT TO GRADE:\n" + output_block,
     ]
@@ -251,7 +272,7 @@ def parse_response(
 
     grades: List[CriterionGrade] = []
     missing = []
-    for crit in workbook.framework:
+    for crit in applicable_criteria(workbook, case):
         entry = by_id.get(crit.id)
         if entry is None:
             missing.append(crit.id)
