@@ -12,8 +12,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from shipready import GradingError, format_report, grade, load_workbook
+from shipready import (
+    Criterion,
+    GradingError,
+    TestCase,
+    ToolCall,
+    Workbook,
+    format_report,
+    grade,
+    load_workbook,
+)
 from shipready.grader import _extract_json, build_user_prompt, parse_response
+
+# TestCase is a domain model, not a pytest test class. Tell pytest not to try
+# to collect it just because its name starts with "Test".
+TestCase.__test__ = False
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "research_assistant.yaml"
 
@@ -102,3 +115,67 @@ def test_grade_with_one_failure():
     report = grade(wb, wb.case("t1"), "out", model="test-model", client=client)
     assert report.ship_ready is False
     assert report.grades[2].label == wb.framework[2].fail_label
+
+
+def _process_workbook(case):
+    return Workbook(
+        agent_name="proc",
+        description="d",
+        framework=[
+            Criterion(
+                id="p1",
+                criterion="tool_appropriateness",
+                grades_what="right tools",
+                pass_label="apt",
+                fail_label="inapt",
+                target="process",
+            ),
+            Criterion(
+                id="o1",
+                criterion="source_quality",
+                grades_what="sources",
+                pass_label="ok",
+                fail_label="weak",
+                target="output",
+            ),
+        ],
+        data_set=[case],
+    )
+
+
+def test_grader_prompt_includes_trace_when_present():
+    case = TestCase(
+        id="t1",
+        input="q",
+        expected_behavior="b",
+        tool_calls=[ToolCall(tool="web_search", args={"q": "x"}, step=1)],
+    )
+    prompt = build_user_prompt(_process_workbook(case), case, "answer")
+    assert "TOOL CALLS:" in prompt
+    assert "web_search" in prompt
+    assert "AGENT TRACE TO INSPECT" in prompt
+
+
+def test_grader_prompt_omits_empty_trace_sections():
+    case = TestCase(id="t1", input="q", expected_behavior="b")  # no artifacts
+    prompt = build_user_prompt(_process_workbook(case), case, "answer")
+    for header in (
+        "TOOL CALLS:",
+        "REASONING TRACE:",
+        "DECISIONS:",
+        "ESCALATIONS:",
+        "AGENT TRACE",
+    ):
+        assert header not in prompt
+
+
+def test_criterion_target_labeled_in_prompt():
+    case = TestCase(
+        id="t1",
+        input="q",
+        expected_behavior="b",
+        tool_calls=[ToolCall(tool="web_search", args={}, step=1)],
+    )
+    prompt = build_user_prompt(_process_workbook(case), case, "answer")
+    assert "target: process" in prompt
+    assert "target: output" in prompt
