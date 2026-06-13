@@ -194,13 +194,25 @@ framework criteria are actually scored.
 - For each criterion: pass or fail, plus a one or two sentence justification
   grounded in the artifact it targeted.
 
-## How grading works
+## How a criterion gets graded
 
-For each test case, shipready builds a prompt that contains the workbook goals,
-boundaries, and framework, the test case input and expected behavior, and the
-candidate output. It asks Claude to return a pass or fail verdict per criterion
-with a one or two sentence justification, then parses that into the report. Run
-with `--verbose` to see the full prompt. Nothing about the judgment is hidden.
+For each test case, shipready builds a prompt containing the inputs listed
+above. Claude returns a verdict per criterion. The grader applies these rules:
+
+1. Each criterion has a target (output or process). The grader judges the
+   criterion against the matching artifact.
+2. The verdict is pass or fail. A one or two sentence justification grounded in
+   the targeted artifact accompanies each verdict.
+3. The pass and fail labels in your report come from the workbook, not Claude's
+   wording. A report never drifts from your rubric language.
+4. When a criterion targets process and the relevant trace artifact is missing,
+   the criterion fails with a missing-trace justification. Process criteria
+   require their trace.
+5. When a criterion targets output and the output is missing, the criterion
+   fails when content is required.
+
+Run with `--verbose` to see the exact prompt Claude received. Nothing about the
+judgment is hidden.
 
 ## Two eval paradigms
 
