@@ -13,7 +13,7 @@ case against the workbook framework.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -45,22 +45,64 @@ class Boundary(BaseModel):
 
 
 class Criterion(BaseModel):
-    """One graded dimension. Every criterion resolves to pass or fail."""
+    """One graded dimension. Every criterion resolves to pass or fail.
+
+    target selects which artifact the criterion is graded against. "output"
+    grades the agent's final answer (the v0 paradigm). "process" grades the
+    agent's behavior through the supplied trace artifacts (tool calls,
+    reasoning, decisions, escalations). Defaults to "output" so existing
+    workbooks load unchanged.
+    """
 
     id: str
     criterion: str
     grades_what: str
     pass_label: str
     fail_label: str
+    target: Literal["output", "process"] = "output"
+
+
+class ToolCall(BaseModel):
+    """One tool invocation in the agent's trace."""
+
+    tool: str
+    args: dict = Field(default_factory=dict)
+    returned: Optional[str] = None
+    step: Optional[int] = None
+
+
+class Decision(BaseModel):
+    """One decision the agent made during the run."""
+
+    at: str
+    decision: str
+    rationale: Optional[str] = None
+
+
+class EscalationEvent(BaseModel):
+    """One point where the agent escalated or handed off."""
+
+    at: str
+    reason: str
+    handed_off_to: Optional[str] = None
 
 
 class TestCase(BaseModel):
-    """One input the agent is expected to handle, plus the target behavior."""
+    """One input the agent is expected to handle, plus the target behavior.
+
+    The optional process artifact fields hold the agent's trace for this case.
+    They are graded by criteria whose target is "process". All are optional so
+    output-only workbooks stay valid.
+    """
 
     id: str
     input: str
     expected_behavior: str
     notes: Optional[str] = None
+    tool_calls: Optional[List[ToolCall]] = None
+    reasoning_trace: Optional[str] = None
+    decisions_log: Optional[List[Decision]] = None
+    escalation_events: Optional[List[EscalationEvent]] = None
 
 
 class Workbook(BaseModel):
