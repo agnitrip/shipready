@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Three-state verdicts: each criterion is now pass, warn, or fail. Criterion
+  gains a severity (hard or soft); a hard fail blocks ship-readiness, a warn
+  never blocks, and a soft fail surfaces without blocking. The report shows
+  SHIP-READY, SHIP-READY (with warnings), or NOT READY. `passed` is kept as a
+  computed field for backward compatibility.
+- Decision scoring: TestCase gains `expected_verdict` and Criterion gains
+  `applies_to` to scope a criterion to an expected branch. A decision branch is
+  scored pass (clean), warn (acceptable but disclosed-degraded), or fail
+  (unacceptable).
+- Trace integrity: a process criterion graded with no trace can no longer pass
+  silently; it is downgraded to at most a warn with a justification noting it
+  was graded from the output self-report.
+- `--all` grades every case in a workbook without silently dropping a failed
+  case, reporting failures and exiting non-zero. `--out PATH` writes the JSON
+  report to a file after grading succeeds, avoiding fragile shell redirects.
 - `--summary` flag on grade. Adds a PM-facing summary block (what went well,
   flags, optional watch item, one-line verdict) above the report card, and a
   `summary` field in `--json` output. It is a second Claude call, so it doubles

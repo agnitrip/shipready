@@ -36,10 +36,12 @@ Claude grader. v1 adds layers 2 and 3.
 
 ## Install
 
+Requires Python 3.11 or newer.
+
 ```
 git clone https://github.com/agnitrip/shipready.git
 cd shipready
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
@@ -325,6 +327,23 @@ doubles the API cost of a grade. If the synthesis call fails, shipready prints a
 warning and falls back to the bare report. With `--json`, the summary is added
 under a `summary` field with `went_well`, `flags`, `watch`, and `verdict`. Off
 by default.
+
+## Grading a whole workbook
+
+Use `--all` to grade every case in a workbook in one run (use it instead of
+`--case`). One case failing to grade does not silently drop it: the failure is
+reported and the command exits non-zero. The supplied output applies to every
+case, so `--all` fits workbooks whose cases carry their own trace artifacts.
+Trace flags are single-case only; embed traces in the workbook for batch runs.
+
+`--out PATH` writes the JSON report to a file while the human card still prints
+to stdout. The file is written only after grading succeeds, so a transient
+error cannot leave a truncated or zero-byte file the way a shell redirect can.
+
+```
+shipready grade --workbook examples/tool_using_research_assistant.yaml --all \
+  --output-file examples/sample_outputs/tool_using_t1_output.txt --out reports.json
+```
 
 ## Two eval paradigms
 
