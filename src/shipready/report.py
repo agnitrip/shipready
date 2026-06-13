@@ -56,13 +56,21 @@ def format_report(report: GradingReport) -> str:
     card_lines.append("=" * 62)
 
     for g in report.grades:
-        mark = "PASS" if g.passed else "FAIL"
-        card_lines.append(f"[{mark}] {g.criterion_id}  {g.criterion}  ({g.label})")
+        mark = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[g.status]
+        line = f"[{mark}] {g.criterion_id}  {g.criterion}  ({g.label})"
+        if g.status == "fail" and g.severity == "soft":
+            line += "  (soft, non-blocking)"
+        card_lines.append(line)
         if g.justification:
             card_lines.append(_wrap(g.justification, indent="       "))
         card_lines.append("")
 
-    verdict = "SHIP-READY" if report.ship_ready else "NOT READY"
+    if not report.ship_ready:
+        verdict = "NOT READY"
+    elif report.has_warnings:
+        verdict = "SHIP-READY (with warnings)"
+    else:
+        verdict = "SHIP-READY"
     card_lines.append("-" * 62)
     card_lines.append(
         f"{report.passed_count}/{report.total_count} criteria passed  ->  {verdict}"

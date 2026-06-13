@@ -81,6 +81,7 @@ def test_criterion_target_defaults_to_output(tmp_path):
     )
     wb = load_workbook(wb_path)
     assert wb.framework[0].target == "output"
+    assert wb.framework[0].severity == "hard"
 
 
 def test_workbook_loads_with_process_criterion(tmp_path):

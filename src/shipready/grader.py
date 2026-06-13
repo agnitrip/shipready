@@ -27,13 +27,17 @@ SYSTEM_PROMPT = (
     "OUTPUT. Other criteria target the agent's PROCESS, which you inspect "
     "through the supplied trace artifacts (tool calls, reasoning, decisions, "
     "escalations). Grade each criterion against the artifact it targets. For "
-    "each criterion, decide pass or fail and write a one or two sentence "
-    "justification grounded in the relevant artifact. Do not invent criteria "
-    "that were not provided, and do not let a strong result on one criterion "
-    "excuse a failure on another. When a criterion targets the output and the "
-    "output is missing, fail it if content is required. When a criterion "
-    "targets the process and the relevant trace artifact is missing, mark it "
-    "failed with a justification noting the missing trace."
+    "each criterion, return a status of pass, warn, or fail, with a one or two "
+    "sentence justification grounded in the relevant artifact. pass means the "
+    "criterion is met. warn means the criterion is met well enough to be "
+    "acceptable but carries a caveat the reader must see; on a warn the "
+    "justification must name that caveat. fail means the criterion is not met. "
+    "Do not invent criteria that were not provided, and do not let a strong "
+    "result on one criterion excuse a failure on another. When a criterion "
+    "targets the output and the output is missing, fail it if content is "
+    "required. When a criterion targets the process and the relevant trace "
+    "artifact is missing, mark it failed with a justification noting the "
+    "missing trace."
 )
 
 
@@ -135,7 +139,7 @@ def build_user_prompt(
     output_block = agent_output.strip() or "(the agent produced no output)"
     has_process = any(c.target == "process" for c in workbook.framework)
     schema_example = (
-        '{"grades": [{"criterion_id": "<id>", "passed": true, '
+        '{"grades": [{"criterion_id": "<id>", "status": "pass | warn | fail", '
         '"justification": "<one or two sentences>"}]}'
     )
 
@@ -174,9 +178,10 @@ def build_user_prompt(
         f"ids: {criterion_ids}.\n"
         "Respond with a single JSON object and nothing else, in this shape:\n"
         f"{schema_example}\n"
-        'Set "passed" to true when the criterion is met and false when it is '
-        "not. Keep each justification to one or two sentences, grounded in the "
-        "relevant artifact."
+        'Set "status" to pass, warn, or fail. Use warn when the criterion is '
+        "acceptable but carries a caveat, and name that caveat in the "
+        "justification. Keep each justification to one or two sentences, "
+        "grounded in the relevant artifact."
     )
 
     return "\n\n".join(sections)
@@ -251,13 +256,22 @@ def parse_response(
         if entry is None:
             missing.append(crit.id)
             continue
-        passed = bool(entry.get("passed"))
+        status = entry.get("status")
+        if status not in ("pass", "warn", "fail"):
+            # Tolerate a legacy boolean "passed" field, else treat as a fail.
+            legacy = entry.get("passed")
+            if isinstance(legacy, bool):
+                status = "pass" if legacy else "fail"
+            else:
+                status = "fail"
+        label = crit.fail_label if status == "fail" else crit.pass_label
         grades.append(
             CriterionGrade(
                 criterion_id=crit.id,
                 criterion=crit.criterion,
-                passed=passed,
-                label=crit.pass_label if passed else crit.fail_label,
+                severity=crit.severity,
+                status=status,
+                label=label,
                 justification=str(entry.get("justification", "")).strip(),
             )
         )
@@ -322,11 +336,11 @@ SUMMARY_SYSTEM_PROMPT = (
     '{"went_well": ["..."], "flags": ["..."], "watch": ["..."], '
     '"verdict": "..."}. '
     "went_well: 3 to 4 bullets drawn from the criteria that passed. "
-    "flags: 1 to 3 bullets surfacing the passes closest to the threshold, any "
-    "soft or borderline results, and notable patterns. "
+    "flags: 1 to 3 bullets surfacing the passes closest to the threshold and "
+    "notable patterns. Every criterion with status WARN must be reflected here. "
     "watch: at most one bullet for something genuinely useful to watch in "
-    "future runs that does not fit above; use an empty list if there is "
-    "nothing. "
+    "future runs that does not fit above; every soft criterion that FAILED must "
+    "be reflected here. Use an empty list if there is nothing. "
     "verdict: one sentence that states the headline reason for the outcome."
 )
 
@@ -339,10 +353,11 @@ def build_summary_prompt(
     lines = []
     for g in report.grades:
         crit = workbook.criterion(g.criterion_id)
-        mark = "PASS" if g.passed else "FAIL"
+        mark = g.status.upper()
         lines.append(
             f"- [{mark}] {g.criterion_id} {g.criterion} "
-            f"(target: {crit.target}, label: {g.label}): {g.justification}"
+            f"(target: {crit.target}, severity: {g.severity}, label: {g.label}): "
+            f"{g.justification}"
         )
     grade_block = "\n".join(lines)
 

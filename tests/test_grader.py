@@ -47,7 +47,7 @@ class StubClient:
 def _all_pass_payload(wb):
     return {
         "grades": [
-            {"criterion_id": c.id, "passed": True, "justification": "looks fine"}
+            {"criterion_id": c.id, "status": "pass", "justification": "looks fine"}
             for c in wb.framework
         ]
     }
@@ -89,7 +89,7 @@ def test_parse_response_snaps_label_to_workbook():
     wb = load_workbook(EXAMPLE)
     payload = _all_pass_payload(wb)
     payload["grades"][0]["label"] = "totally_made_up_label"
-    payload["grades"][1]["passed"] = False
+    payload["grades"][1]["status"] = "fail"
     payload["grades"][1]["label"] = "another_made_up_label"
     response = json.dumps(payload)
     report = parse_response(wb, wb.case("t1"), response, "test-model")
@@ -111,7 +111,7 @@ def test_grade_with_stub_all_pass():
 def test_grade_with_one_failure():
     wb = load_workbook(EXAMPLE)
     payload = _all_pass_payload(wb)
-    payload["grades"][2]["passed"] = False
+    payload["grades"][2]["status"] = "fail"
     client = StubClient(payload)
     report = grade(wb, wb.case("t1"), "out", model="test-model", client=client)
     assert report.ship_ready is False
@@ -242,3 +242,83 @@ def test_summarize_bad_json_raises():
 
     with pytest.raises(GradingError):
         summarize(wb, wb.case("t1"), report, model="m", client=BadClient())
+
+
+def _severity_workbook(c2_severity):
+    return Workbook(
+        agent_name="sev",
+        description="d",
+        framework=[
+            Criterion(
+                id="c1", criterion="a", grades_what="x",
+                pass_label="ok", fail_label="bad",
+            ),
+            Criterion(
+                id="c2", criterion="b", grades_what="y",
+                pass_label="ok2", fail_label="bad2", severity=c2_severity,
+            ),
+        ],
+        data_set=[TestCase(id="t1", input="q", expected_behavior="b")],
+    )
+
+
+def _status_payload(statuses):
+    return {
+        "grades": [
+            {"criterion_id": cid, "status": st, "justification": "j"}
+            for cid, st in statuses.items()
+        ]
+    }
+
+
+def _grade_statuses(wb, statuses):
+    client = StubClient(_status_payload(statuses))
+    return grade(wb, wb.data_set[0], "o", model="m", client=client)
+
+
+def test_warn_does_not_block_and_surfaces():
+    report = _grade_statuses(_severity_workbook("hard"), {"c1": "pass", "c2": "warn"})
+    assert report.ship_ready is True
+    assert report.has_warnings is True
+    assert report.grades[1].status == "warn"
+    assert report.grades[1].passed is True
+    card = format_report(report)
+    assert "[WARN]" in card
+    assert "SHIP-READY (with warnings)" in card
+
+
+def test_soft_fail_does_not_block():
+    report = _grade_statuses(_severity_workbook("soft"), {"c1": "pass", "c2": "fail"})
+    assert report.ship_ready is True
+    assert report.has_warnings is True
+    card = format_report(report)
+    assert "(soft, non-blocking)" in card
+    assert "SHIP-READY (with warnings)" in card
+
+
+def test_hard_fail_blocks():
+    report = _grade_statuses(_severity_workbook("hard"), {"c1": "pass", "c2": "fail"})
+    assert report.ship_ready is False
+    assert "NOT READY" in format_report(report)
+
+
+def test_warn_serializes_with_computed_passed():
+    report = _grade_statuses(_severity_workbook("hard"), {"c1": "pass", "c2": "warn"})
+    g2 = json.loads(report.model_dump_json())["grades"][1]
+    assert g2["status"] == "warn"
+    assert g2["passed"] is True
+
+
+def test_legacy_passed_bool_still_parses():
+    wb = _severity_workbook("hard")
+    response = json.dumps(
+        {
+            "grades": [
+                {"criterion_id": "c1", "passed": True, "justification": "j"},
+                {"criterion_id": "c2", "passed": False, "justification": "j"},
+            ]
+        }
+    )
+    report = parse_response(wb, wb.data_set[0], response, "m")
+    assert report.grades[0].status == "pass"
+    assert report.grades[1].status == "fail"

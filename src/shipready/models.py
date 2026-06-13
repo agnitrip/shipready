@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 
 def _require_unique_ids(items, label):
@@ -45,13 +45,17 @@ class Boundary(BaseModel):
 
 
 class Criterion(BaseModel):
-    """One graded dimension. Every criterion resolves to pass or fail.
+    """One graded dimension. Each criterion resolves to pass, warn, or fail.
 
     target selects which artifact the criterion is graded against. "output"
     grades the agent's final answer (the v0 paradigm). "process" grades the
     agent's behavior through the supplied trace artifacts (tool calls,
     reasoning, decisions, escalations). Defaults to "output" so existing
     workbooks load unchanged.
+
+    severity controls whether a fail blocks ship-readiness. "hard" (the
+    default) means a fail blocks. "soft" means a fail surfaces in the report
+    but does not block the verdict.
     """
 
     id: str
@@ -60,6 +64,7 @@ class Criterion(BaseModel):
     pass_label: str
     fail_label: str
     target: Literal["output", "process"] = "output"
+    severity: Literal["hard", "soft"] = "hard"
 
 
 class ToolCall(BaseModel):
@@ -144,13 +149,25 @@ class Workbook(BaseModel):
 
 
 class CriterionGrade(BaseModel):
-    """The verdict for one criterion on one candidate output."""
+    """The verdict for one criterion on one candidate output.
+
+    status is pass, warn, or fail. severity is copied from the criterion so the
+    report can decide on its own whether a fail blocks. passed is kept as a
+    computed field (status is not fail) so older --json consumers and counts
+    that read passed keep working.
+    """
 
     criterion_id: str
     criterion: str
-    passed: bool
+    severity: Literal["hard", "soft"] = "hard"
+    status: Literal["pass", "warn", "fail"]
     label: str
     justification: str
+
+    @computed_field
+    @property
+    def passed(self) -> bool:
+        return self.status != "fail"
 
 
 class Summary(BaseModel):
@@ -184,6 +201,22 @@ class GradingReport(BaseModel):
         return len(self.grades)
 
     @property
+    def has_warnings(self) -> bool:
+        """True when something non-blocking should still catch the eye.
+
+        A warn on any criterion, or a fail on a soft criterion.
+        """
+        return any(
+            g.status == "warn" or (g.severity == "soft" and g.status == "fail")
+            for g in self.grades
+        )
+
+    @property
     def ship_ready(self) -> bool:
-        """A case is ship-ready only when every criterion passes."""
-        return all(g.passed for g in self.grades)
+        """Ship-ready unless a hard criterion failed.
+
+        A warn never blocks. A soft fail never blocks; it surfaces only.
+        """
+        return not any(
+            g.severity == "hard" and g.status == "fail" for g in self.grades
+        )
