@@ -17,7 +17,7 @@ from .models import (
 from .report import format_report, format_summary
 from .workbook import WorkbookError, load_workbook
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "__version__",

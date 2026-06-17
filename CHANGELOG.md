@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 (2026-06-16)
+
 - Three-state verdicts: each criterion is now pass, warn, or fail. Criterion
   gains a severity (hard or soft); a hard fail blocks ship-readiness, a warn
   never blocks, and a soft fail surfaces without blocking. The report shows
