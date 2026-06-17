@@ -23,3 +23,19 @@ env/
 
 # OS
 .DS_Store
+
+# Dogfood raw inputs (large; fetch from the public source URL instead).
+# Commit only the light reproducible artifacts: workbooks (*.yaml), the converted
+# tool_calls.json / reasoning.txt / output.txt, ground-truth *_step_scores.json,
+# patch.diff, the handoff doc, and the converter script.
+dogfood/**/*.traj
+dogfood/**/*.parquet
+dogfood/**/*.zip
+dogfood/**/report.json
+# WebSTAR raw trajectory dumps (the unzipped ShareGPT files; only the converted
+# files and *_step_scores.json are kept). Add a similar line for any new raw
+# source whose files are not one of the kept names above.
+dogfood/webstar/taskMind2Web-*.json
+
+# Internal-skill dogfoods (grade Agni's own private skills; not for the public repo).
+dogfood/_internal/
