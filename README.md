@@ -39,6 +39,12 @@ Claude grader. v1 adds layers 2 and 3.
 Requires Python 3.11 or newer.
 
 ```
+pip install shipready
+```
+
+To work on shipready itself, install from source instead:
+
+```
 git clone https://github.com/agnitrip/shipready.git
 cd shipready
 python3 -m venv .venv && source .venv/bin/activate
@@ -54,9 +60,13 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ## Quick start
 
 The repo ships two worked examples: a generic research assistant (outcome eval)
-and a tool-using research assistant (process eval). Start with the first.
-Validate the workbook, list its cases, then grade a sample output against case
-`t1`.
+and a tool-using research assistant (process eval). The commands below read these
+files from the repo, so clone it to follow along (the from-source steps above do
+that). If you installed from PyPI to run shipready on your own agent, point
+`--workbook` at your own YAML instead.
+
+Start with the first example. Validate the workbook, list its cases, then grade a
+sample output against case `t1`.
 
 ```
 shipready validate --workbook examples/research_assistant.yaml
