@@ -1,0 +1,175 @@
+diff --git a/beancount/plugins/leafonly.py b/beancount/plugins/leafonly.py
+index 98b7ae57..591f1114 100644
+--- a/beancount/plugins/leafonly.py
++++ b/beancount/plugins/leafonly.py
+@@ -13,6 +13,7 @@ __license__ = "GNU GPLv2"
+ import collections
+ 
+ from beancount.core import data
++from beancount.core.data import Balance, TxnPosting
+ from beancount.core import getters
+ from beancount.core import realization
+ 
+@@ -38,6 +39,14 @@ def validate_leaf_only(entries, unused_options_map):
+     errors = []
+     for real_account in realization.iter_children(real_root):
+         if len(real_account) > 0 and real_account.txn_postings:
++            # Skip accounts that only have non-transaction directives (Balance, Open, Close, etc.)
++            # We only want to flag accounts that have actual TxnPosting instances (transaction postings)
++            has_transaction_postings = any(
++                isinstance(txn_posting, data.TxnPosting) for txn_posting in real_account.txn_postings
++            )
++            if not has_transaction_postings:
++                continue
++
+             if open_close_map is None:
+                 open_close_map = getters.get_account_open_close(entries)
+ 
+diff --git a/beancount/plugins/leafonly_test.py b/beancount/plugins/leafonly_test.py
+index d6e4ae2b..f37e09a2 100644
+--- a/beancount/plugins/leafonly_test.py
++++ b/beancount/plugins/leafonly_test.py
+@@ -49,6 +49,47 @@ class TestLeafOnly(unittest.TestCase):
+         for error in errors:
+             self.assertRegex(error.message, "Expenses:Food")
+ 
++    @loader.load_doc()
++    def test_leaf_only_balance_directives_allowed(self, _, errors, __):
++        """
++        plugin "beancount.plugins.leafonly"
++
++        2011-01-01 open Income:US:Hooli          USD
++        2011-01-01 open Income:US:Hooli:AnnualBonus
++        2011-01-01 open Income:US:Hooli:GroupTermLife
++        2011-01-01 open Income:US:Hooli:Salary
++        2011-01-01 open Equity:Retained-Earnings USD
++
++        2011-05-17 * "Hooli Payroll"
++          Income:US:Hooli:AnnualBonus          -2,000.00 USD
++          Income:US:Hooli:GroupTermLife           -24.64 USD
++          Income:US:Hooli:Salary                -9,126.89 USD
++          Equity:Retained-Earnings               11,151.53 USD
++
++        2011-05-24 balance Income:US:Hooli       -11,151.53 USD
++        """
++        # Balance directives on non-leaf accounts should NOT trigger leafonly errors
++        leafonly_errors = [err for err in errors if err.__class__.__name__ == "LeafOnlyError"]
++        self.assertEqual(0, len(leafonly_errors))
++
++    @loader.load_doc(expect_errors=True)
++    def test_leaf_only_still_catches_postings(self, _, errors, __):
++        """
++        plugin "beancount.plugins.leafonly"
++
++        2011-01-01 open Expenses:Food          USD
++        2011-01-01 open Expenses:Food:Restaurant
++        2011-01-01 open Assets:Other           USD
++
++        2011-05-17 * "Something"
++          Expenses:Food         1.00 USD ;; Offending posting.
++          Assets:Other         -1.00 USD
++        """
++        # Actual transaction postings on non-leaf accounts should still trigger errors
++        leafonly_errors = [err for err in errors if err.__class__.__name__ == "LeafOnlyError"]
++        self.assertEqual(1, len(leafonly_errors))
++        self.assertRegex(leafonly_errors[0].message, "Expenses:Food")
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 00000000..1d0cc09c
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,89 @@
++#!/usr/bin/env python3
++
++from beancount import loader
++from beancount.core.amount import A
++
++def test_leafonly_with_balance():
++    """Test that balance directives on non-leaf accounts work with leafonly plugin."""
++    
++    input_text = """
++plugin "beancount.plugins.leafonly"
++
++2019-01-01 open Income:US:Hooli          USD
++2019-01-01 open Income:US:Hooli:AnnualBonus
++2019-01-01 open Income:US:Hooli:GroupTermLife
++2019-01-01 open Income:US:Hooli:Salary
++2019-01-01 open Equity:Retained-Earnings USD
++
++2019-05-03 * "Hooli 2019 YTD Payroll"
++  Income:US:Hooli:AnnualBonus              -2,000.00 USD
++  Income:US:Hooli:GroupTermLife               -24.64 USD
++  Income:US:Hooli:Salary                   -9,126.89 USD
++  Equity:Retained-Earnings                  9,126.89 USD
++
++; This should now work with the leafonly plugin fix
++2019-05-24 balance Income:US:Hooli       -11,151.53 USD
++"""
++    
++    entries, errors, options_map = loader.load_string(input_text)
++    
++    print(f"Entries: {len(entries)}")
++    print(f"Errors: {len(errors)}")
++    
++    # Check that there are no LeafOnlyErrors
++    leafonly_errors = [err for err in errors if hasattr(err, '__class__') and err.__class__.__name__ == 'LeafOnlyError']
++    print(f"LeafOnlyErrors: {len(leafonly_errors)}")
++    
++    if leafonly_errors:
++        for error in leafonly_errors:
++            print(f"FAILED: LeafOnlyError still occurs: {error}")
++        return False
++    else:
++        print("SUCCESS: No LeafOnlyErrors!")
++        
++    # Check that there are balance errors (expected due to balance check)
++    balance_errors = [err for err in errors if hasattr(err, '__class__') and err.__class__.__name__ == 'BalanceError']
++    print(f"BalanceErrors: {len(balance_errors)} (expected)")
++    
++    return True
++
++def test_leafonly_still_works_with_postings():
++    """Test that leafonly plugin still catches actual postings on non-leaf accounts."""
++    
++    input_text = """
++plugin "beancount.plugins.leafonly"
++
++2019-01-01 open Expenses:Food          USD
++2019-01-01 open Expenses:Food:Restaurant
++2019-01-01 open Assets:Other           USD
++
++; This should still fail - actual posting on non-leaf account
++2019-05-17 * "Something"
++  Expenses:Food         1.00 USD ;; Offending posting.
++  Assets:Other         -1.00 USD
++"""
++    
++    entries, errors, options_map = loader.load_string(input_text)
++    
++    print(f"\n=== Test 2: Leafonly should still catch actual postings ===")
++    print(f"Entries: {len(entries)}")
++    print(f"Errors: {len(errors)}")
++    
++    # Check that there are LeafOnlyErrors
++    leafonly_errors = [err for err in errors if hasattr(err, '__class__') and err.__class__.__name__ == 'LeafOnlyError']
++    print(f"LeafOnlyErrors: {len(leafonly_errors)}")
++    
++    if leafonly_errors:
++        print("SUCCESS: LeafOnlyError correctly caught actual posting!")
++        return True
++    else:
++        print("FAILED: LeafOnlyError did not catch actual posting")
++        return False
++
++if __name__ == "__main__":
++    test1_result = test_leafonly_with_balance()
++    test2_result = test_leafonly_still_works_with_postings()
++    
++    print(f"\n=== Summary ===")
++    print(f"Test 1 (balance on non-leaf): {'PASSED' if test1_result else 'FAILED'}")
++    print(f"Test 2 (posting on non-leaf): {'PASSED' if test2_result else 'FAILED'}")
+\ No newline at end of file

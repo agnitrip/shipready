@@ -1,0 +1,170 @@
+[
+  {
+    "tool": "issue_analyzer",
+    "args": {
+      "command": "issue_analyzer '[bug] Bazel server needs to be killed\n### Describe the bug\n\nI tried to create a Conan package of a library built with Bazel. The dependencies of the library, however, are modeled in Bazel. Everything worked fine as long as the parameter \"clean\" to the Bazel.build function was set to "
+    },
+    "returned": "'## Issue Analysis: Bazel Server Kill Bug in Conan'\"'\"'s Bazel.build Function  ### 1. Issue Type **Bug Report** - Confirmed functional issue causing unexpected Bazel server termination  ### 2. Core Problem Information #### Problem Statement & Symptoms When using `clean=True` in `Bazel.build()`, the Bazel server is unnecessarily killed with warnings due to differing startup options between consecut",
+    "step": 1
+  },
+  {
+    "tool": "code_navigator",
+    "args": {
+      "command": "code_navigator '/testbed conan/tools/google/bazel.py Bazel.build'"
+    },
+    "returned": "'## Code Structure Analysis: Conan'\"'\"'s Google/Bazel Integration  ### Overview I'\"'\"'ve explored the Bazel integration in Conan, focusing on the issue described in the PR where the Bazel server needs to be killed when using `clean=True` in the `Bazel.build()` method.  ### Key Components  #### 1. `/testbed/conan/tools/google/bazel.py` - **Bazel Class**: Main interface for running Bazel commands - ",
+    "step": 2
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/conan/tools/google/bazel.py"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/conan/tools/google/bazel.py:      1\timport os      2\timport platform      3\t      4\tfrom conan.tools.google import BazelToolchain      5\t      6\t      7\tclass Bazel(object):      8\t      9\t    def __init__(self, conanfile):     10\t        \"\"\"     11\t        :param conanfile: ``< ConanFile object >`` The current recipe object. Always use ``self``.  ",
+    "step": 3
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor str_replace /testbed/conan/tools/google/bazel.py   --old_str '# Note: In case of error like this: ... https://bcr.bazel.build/: PKIX path building failed\n        # Check this comment: https://github.com/bazelbuild/bazel/issues/3915#issuecomment-1120894057\n        command = \"bazel\""
+    },
+    "returned": "The file /testbed/conan/tools/google/bazel.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/conan/tools/google/bazel.py:     51\t            bazelrc_configs.append(BazelToolchain.bazelrc_config)     52\t        # User bazelrc paths have more prio than Conan one     53\t        # See more info in https://bazel.build/run/bazelrc     54\t        bazelrc_paths.extend(self",
+    "step": 4
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/test/unittests/tools/google"
+    },
+    "returned": "Here's the files and directories up to 2 levels deep in /testbed/test/unittests/tools/google, excluding hidden items: /testbed/test/unittests/tools/google /testbed/test/unittests/tools/google/__init__.py /testbed/test/unittests/tools/google/test_bazel.py /testbed/test/unittests/tools/google/__pycache__ /testbed/test/unittests/tools/google/__pycache__/__init__.cpython-38.pyc /testbed/test/unittests",
+    "step": 5
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/test/unittests/tools/google/test_bazel.py"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/test/unittests/tools/google/test_bazel.py:      1\timport os      2\timport platform      3\tfrom unittest.mock import MagicMock      4\t      5\timport pytest      6\t      7\tfrom conan.test.utils.mocks import ConanFileMock      8\tfrom conan.test.utils.test_files import temp_folder      9\tfrom conan.tools.files import save     10\tfrom conan.tools.google",
+    "step": 6
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor str_replace /testbed/test/unittests/tools/google/test_bazel.py   --old_str '@pytest.mark.skipif(platform.system() == \"Windows\", reason=\"Remove this skip for Conan 2.x.\"\n                                                           \"Needs conanfile.commands\")\ndef test_bazel_command_wi"
+    },
+    "returned": "The file /testbed/test/unittests/tools/google/test_bazel.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test/unittests/tools/google/test_bazel.py:     44\t    bazel.build(target='//test:label')     45\t    # Uncomment Conan 2.x     46\t    assert 'bazel build //test:label' in conanfile.commands     47\t     48\t     49\t@pytest.mark.skipif(platform.system() == \"Window",
+    "step": 7
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && python -m pytest test/unittests/tools/google/test_bazel.py::test_bazel_command_with_config_values -v"
+    },
+    "returned": "============================= test session starts ============================== platform linux -- Python 3.8.20, pytest-7.4.4, pluggy-1.5.0 -- /usr/local/bin/python cachedir: .pytest_cache rootdir: /testbed configfile: pytest.ini plugins: xdist-3.6.1 collecting ... \rcollected 1 item                                                                 test/unittests/tools/google/test_bazel.py::test_baz",
+    "step": 8
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && python -m pytest test/unittests/tools/google/test_bazel.py::test_bazel_command_with_clean_and_config_values -v"
+    },
+    "returned": "============================= test session starts ============================== platform linux -- Python 3.8.20, pytest-7.4.4, pluggy-1.5.0 -- /usr/local/bin/python cachedir: .pytest_cache rootdir: /testbed configfile: pytest.ini plugins: xdist-3.6.1 collecting ... \rcollected 1 item                                                                 test/unittests/tools/google/test_bazel.py::test_baz",
+    "step": 9
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/conan/test/utils/mocks.py  --view_range 1 50"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/conan/test/utils/mocks.py:      1\tfrom collections import defaultdict      2\tfrom io import StringIO      3\t      4\tfrom conan import ConanFile      5\tfrom conan.internal.conan_app import ConanFileHelpers      6\tfrom conan.errors import ConanException      7\tfrom conans.model.conf import Conf      8\tfrom conans.model.layout import Folders, Infos   ",
+    "step": 10
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && find . -name \"*.py\" -exec grep -l \"ConanFileMock\" {} \\; | head -10"
+    },
+    "returned": "./test/integration/tools/system/package_manager_test.py ./test/unittests/tools/files/test_file_read_and_write.py ./test/unittests/tools/files/test_zipping.py ./test/unittests/tools/files/test_downloads.py ./test/unittests/tools/files/test_patches.py ./test/unittests/tools/files/collect_lib_test.py ./test/unittests/tools/files/test_rename.py ./test/unittests/tools/apple/test_apple_tools.py ./test/u",
+    "step": 11
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/test/unittests/tools/google/test_bazel.py  --view_range 1 20"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/test/unittests/tools/google/test_bazel.py:      1\timport os      2\timport platform      3\tfrom unittest.mock import MagicMock      4\t      5\timport pytest      6\t      7\tfrom conan.test.utils.mocks import ConanFileMock      8\tfrom conan.test.utils.test_files import temp_folder      9\tfrom conan.tools.files import save     10\tfrom conan.tools.google",
+    "step": 12
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor str_replace /testbed/test/unittests/tools/google/test_bazel.py   --old_str '@pytest.mark.skipif(platform.system() == \"Windows\", reason=\"Remove this skip for Conan 2.x.\"\n                                                           \"Needs conanfile.commands\")\ndef test_bazel_command_wi"
+    },
+    "returned": "The file /testbed/test/unittests/tools/google/test_bazel.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test/unittests/tools/google/test_bazel.py:     44\t    bazel.build(target='//test:label')     45\t    # Uncomment Conan 2.x     46\t    assert 'bazel build //test:label' in conanfile.commands     47\t     48\t     49\t@pytest.mark.skipif(platform.system() == \"Window",
+    "step": 13
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor str_replace /testbed/test/unittests/tools/google/test_bazel.py   --old_str '@pytest.mark.skipif(platform.system() == \"Windows\", reason=\"Remove this skip for Conan 2.x\"\n                                                           \"Needs conanfile.commands\")\ndef test_bazel_command_wit"
+    },
+    "returned": "The file /testbed/test/unittests/tools/google/test_bazel.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test/unittests/tools/google/test_bazel.py:     34\t    cpp_info_mock.bindirs = [bindirs]     35\t    cpp_info_mock.aggregated_components.return_value = cpp_info_mock     36\t    return cpp_info_mock     37\t     38\t     39\t@pytest.mark.skipif(platform.system() == ",
+    "step": 14
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && python -m pytest test/unittests/tools/google/test_bazel.py::test_bazel_command_with_config_values -v"
+    },
+    "returned": "============================= test session starts ============================== platform linux -- Python 3.8.20, pytest-7.4.4, pluggy-1.5.0 -- /usr/local/bin/python cachedir: .pytest_cache rootdir: /testbed configfile: pytest.ini plugins: xdist-3.6.1 collecting ... \rcollected 1 item                                                                 test/unittests/tools/google/test_bazel.py::test_baz",
+    "step": 15
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && python -m pytest test/unittests/tools/google/test_bazel.py::test_bazel_command_with_clean_and_config_values -v"
+    },
+    "returned": "============================= test session starts ============================== platform linux -- Python 3.8.20, pytest-7.4.4, pluggy-1.5.0 -- /usr/local/bin/python cachedir: .pytest_cache rootdir: /testbed configfile: pytest.ini plugins: xdist-3.6.1 collecting ... \rcollected 1 item                                                                 test/unittests/tools/google/test_bazel.py::test_baz",
+    "step": 16
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && python -m pytest test/unittests/tools/google/test_bazel.py::test_bazel_command_with_clean_and_no_config_values -v"
+    },
+    "returned": "============================= test session starts ============================== platform linux -- Python 3.8.20, pytest-7.4.4, pluggy-1.5.0 -- /usr/local/bin/python cachedir: .pytest_cache rootdir: /testbed configfile: pytest.ini plugins: xdist-3.6.1 collecting ... \rcollected 1 item                                                                 test/unittests/tools/google/test_bazel.py::test_baz",
+    "step": 17
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && python -m pytest test/unittests/tools/google/test_bazel.py -v"
+    },
+    "returned": "============================= test session starts ============================== platform linux -- Python 3.8.20, pytest-7.4.4, pluggy-1.5.0 -- /usr/local/bin/python cachedir: .pytest_cache rootdir: /testbed configfile: pytest.ini plugins: xdist-3.6.1 collecting ... \rcollected 28 items                                                               test/unittests/tools/google/test_bazel.py::test_baz",
+    "step": 18
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && find . -name \"*test*bazel*\" -type f"
+    },
+    "returned": "./test/integration/toolchains/google/__pycache__/test_bazeltoolchain.cpython-38-pytest-7.4.4.pyc ./test/integration/toolchains/google/__pycache__/test_bazeldeps.cpython-38-pytest-7.4.4.pyc ./test/integration/toolchains/google/test_bazeltoolchain.py ./test/integration/toolchains/google/test_bazeldeps.py ./test/unittests/tools/google/test_bazel.py ./test/unittests/tools/google/__pycache__/test_bazel",
+    "step": 19
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && python -m pytest test/functional/toolchains/google/test_bazel.py -v"
+    },
+    "returned": "============================= test session starts ============================== platform linux -- Python 3.8.20, pytest-7.4.4, pluggy-1.5.0 -- /usr/local/bin/python cachedir: .pytest_cache rootdir: /testbed configfile: pytest.ini plugins: xdist-3.6.1 collecting ... \rcollected 12 items                                                               test/functional/toolchains/google/test_bazel.py::te",
+    "step": 20
+  },
+  {
+    "tool": "submit",
+    "args": {
+      "command": "submit"
+    },
+    "returned": "diff --git a/conan/tools/google/bazel.py b/conan/tools/google/bazel.py index e0a8cbb4d..aa5aa3149 100644 --- a/conan/tools/google/bazel.py +++ b/conan/tools/google/bazel.py @@ -55,21 +55,23 @@ class Bazel(object):                                                        check_type=list))          # Note: In case of error like this: ... https://bcr.bazel.build/: PKIX path building failed          # C",
+    "step": 21
+  }
+]

@@ -1,0 +1,104 @@
+Step 1: <seed:think>Let me start by understanding the problem:
+
+1. The issue is with the Bazel.build function in Conan when clean=True is used
+2. The problem is that when clean=True, two separate Bazel commands are executed:
+   - `bazel clean` (without any startup options like --bazelrc)
+   - `bazel --bazelrc=... build ...` (with startup options)
+3. This causes Bazel to kill the server because the startup options are different between the two commands
+4. The proposed fix is to use the same startup options (including --bazelrc) for both the clean and build commands
+
+Let me follow the process step by st
+
+Step 2: <seed:think>Now I have a clear understanding of the issue. The problem is in the `Bazel.build()` method in `/conan/tools/google/bazel.py` where the `bazel clean` command is called without the same startup options (specifically `--bazelrc` flags) as the subsequent `bazel build` command.
+
+Let me now use the code_navigator subagent to find the exact location of this file and understand the current implementation.</seed:think>Now let me use the code_navigator subagent to locate the exact file and function that needs to be modified.
+
+Step 3: <seed:think>Now I have a clear understanding of the issue and the code structure. The problem is in the `Bazel.build()` method in `/testbed/conan/tools/google/bazel.py` where when `clean=True`, it calls `bazel clean` without passing the same startup options (bazelrc paths) that are included in the subsequent `bazel build` command.
+
+Let me examine the current implementation of the `build` method to understand exactly what needs to be changed.</seed:think>Now let me examine the current implementation of the `Bazel.build()` method to understand exactly what needs to be changed.
+
+Step 4: <seed:think>Now I can see the exact issue. Looking at the current `build` method in `/testbed/conan/tools/google/bazel.py`:
+
+1. Lines 58-69: The code constructs the `command` variable with all the proper startup options (--bazelrc flags) for the build command
+2. Lines 70-71: When `clean=True`, it calls `self._safe_run_command("bazel clean")` WITHOUT any of the startup options that were added to the `command` variable
+
+The fix proposed in the PR is exactly what needs to be done:
+1. Instead of calling `"bazel clean"` directly, we need to construct a `clean_command` that includes the same `startu
+
+Step 5: <seed:think>Great! I've successfully implemented the fix. Let me review what I changed:
+
+1. **Before**: 
+   - `command = "bazel"` was used to build the command
+   - `for rc in bazelrc_paths:` added `--bazelrc=...` flags directly to `command`
+   - `if clean:` called `self._safe_run_command("bazel clean")` without any startup options
+
+2. **After**:
+   - `bazel_exe = "bazel"` is now a separate variable
+   - `startup_options = ""` is a new variable that collects all the `--bazelrc=...` flags
+   - `build_command = bazel_exe + startup_options + " build"` constructs the build command with proper star
+
+Step 6: <seed:think>Let me check the existing tests for the Bazel class to see if there are any tests for the build method and if I need to update them or add new tests.</seed:think>
+
+Step 7: <seed:think>Now I can see the existing tests for the Bazel class. I notice there are two main tests for the build method:
+
+1. `test_bazel_command_with_empty_config` - tests build with no config
+2. `test_bazel_command_with_config_values` - tests build with configs and bazelrc_path
+
+However, none of these tests specifically test the `clean=True` parameter which is what I just modified. I should add a test to ensure that when `clean=True` is used, the `bazel clean` command is called with the same startup options as the build command.
+
+Let me add a test for this specific case.</seed:think>I notice
+
+Step 8: <seed:think>Now I should run the tests to make sure my changes work correctly and don't break existing functionality. Let me run the specific tests I just modified to see if they pass.</seed:think>Now let me run the tests to make sure my changes work correctly and don't break existing functionality.
+
+Step 9: <seed:think>Great! The existing test still passes. Now let me run the new tests I added to make sure they work correctly with my changes.</seed:think>
+
+Step 10: <seed:think>It seems like the ConanFileMock doesn't have a `commands` attribute that gets populated. Let me check what the ConanFileMock actually does and how the existing tests work.
+
+Looking at the existing test, it seems like they expect `conanfile.commands` to exist, but it's empty. Let me check what ConanFileMock actually provides.</seed:think>Let me check what the ConanFileMock actually provides and why the commands are not being recorded.
+
+Step 11: <seed:think>Let me search for the ConanFileMock class to understand how it works and why the commands are not being recorded.</seed:think>
+
+Step 12: <seed:think>It seems like the ConanFileMock doesn't have a `commands` attribute that gets populated. Let me check how the existing tests work and see if I need to mock the `run` method instead.
+
+Looking at the existing test:
+
+```python
+@pytest.mark.skipif(platform.system() == "Windows", reason="Remove this skip for Conan 2.x"
+                                                           "Needs conanfile.commands")
+def test_bazel_command_with_empty_config():
+    conanfile = ConanFileMock()
+    bazel = Bazel(conanfile)
+    bazel.build(target='//test:label')
+    # Uncomment Conan 2.x
+    assert 'baz
+
+Step 13: <seed:think>It seems like the ConanFileMock doesn't have a `commands` attribute that gets populated automatically. Let me check what the existing tests are doing and see if I need to mock the `run` method instead.
+
+Looking at the existing test:
+
+```python
+@pytest.mark.skipif(platform.system() == "Windows", reason="Remove this skip for Conan 2.x"
+                                                           "Needs conanfile.commands")
+def test_bazel_command_with_empty_config():
+    conanfile = ConanFileMock()
+    bazel = Bazel(conanfile)
+    bazel.build(target='//test:label')
+    # Uncomment Conan
+
+Step 14: <seed:think>I need to also fix the first test that uses conanfile.commands to use the same mocking approach for consistency.</seed:think>Let me also fix the first test to use the same mocking approach for consistency:
+
+Step 15: <seed:think>Now let me run the tests again to see if they pass with my mocking approach.</seed:think>
+
+Step 16: <seed:think>Great! Now let me test the new tests I added to make sure they work correctly with my fix.</seed:think>
+
+Step 17: <seed:think>Great! Now let me test the third new test I added:</seed:think>
+
+Step 18: <seed:think>Great! All the tests are passing now. Let me run all the Bazel tests to make sure I didn't break anything:</seed:think>
+
+Step 19: <seed:think>Great! All the tests are passing. Now let me also run some broader tests to make sure I haven't broken anything else in the repository. Let me check if there are any other tests related to Bazel functionality.</seed:think>Let me also run some broader tests to make sure I haven't broken anything else in the repository:
+
+Step 20: <seed:think>Let me run some of the integration and functional tests to make sure my changes don't break anything else.</seed:think>
+
+Step 21: <seed:think>The functional tests are failing because Bazel isn't installed in the test environment, which is expected. These are integration tests that require the actual Bazel tool to be installed. The important thing is that my unit tests are all passing, which means my changes are working correctly at the code level.
+
+Let me now check if there are any other tests that might be affected by my changes, and then I should clean up any temporary files I created and submit the changes.</seed:think>The functional tests are failing because Bazel isn't installed in the test environment, which is exp

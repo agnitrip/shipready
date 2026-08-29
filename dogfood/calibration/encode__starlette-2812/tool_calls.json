@@ -1,0 +1,154 @@
+[
+  {
+    "tool": "issue_analyzer",
+    "args": {
+      "command": "issue_analyzer 'middleware causes exceptions to not be raised/handled silently (back again)\nRegression of #1976 #1977 #1609 #1940 \n\nThis time I have noticed that changing `MyExc(Exception)` to `MyExc(BaseException)` means the error does get sent to stdout (if that helps) I tried to have a dig but I "
+    },
+    "returned": "'## Issue Analysis Summary: Middleware Causes Exceptions to Be Handled Silently (Regression)  ### Core Issue Information - **Type**: Bug Report (Regression) - **Problem**: Adding `BaseHTTPMiddleware` to FastAPI causes silent exception handling in mounted sub-apps when using `Exception` subclasses - **Regression**: Affects previously fixed issues #1976, #1977, #1609, #1940  ### Key Findings by File",
+    "step": 1
+  },
+  {
+    "tool": "code_navigator",
+    "args": {
+      "command": "code_navigator 'starlette middleware basehttpmiddleware exception handling'"
+    },
+    "returned": "'## Starlette Middleware Exception Handling Code Structure Analysis  ### Key Files and Their Roles  #### 1. `/testbed/starlette/middleware/base.py` - **Purpose**: Contains `BaseHTTPMiddleware` - the base class for HTTP middleware - **Critical Component**: The `__call__` method implements the ASGI protocol with complex exception handling - **Problematic Code**: Line 142 catches only `Exception` but",
+    "step": 2
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/starlette/middleware/base.py"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/starlette/middleware/base.py:      1\tfrom __future__ import annotations      2\t      3\timport typing      4\t      5\timport anyio      6\t      7\tfrom starlette._utils import collapse_excgroups      8\tfrom starlette.requests import ClientDisconnect, Request      9\tfrom starlette.responses import AsyncContentStream, Response     10\tfrom starlette.type",
+    "step": 3
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/starlette/_exception_handler.py"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/starlette/_exception_handler.py:      1\tfrom __future__ import annotations      2\t      3\timport typing      4\t      5\tfrom starlette._utils import is_async_callable      6\tfrom starlette.concurrency import run_in_threadpool      7\tfrom starlette.exceptions import HTTPException      8\tfrom starlette.requests import Request      9\tfrom starlette.typ",
+    "step": 4
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/starlette/middleware/errors.py"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/starlette/middleware/errors.py:      1\tfrom __future__ import annotations      2\t      3\timport html      4\timport inspect      5\timport sys      6\timport traceback      7\timport typing      8\t      9\tfrom starlette._utils import is_async_callable     10\tfrom starlette.concurrency import run_in_threadpool     11\tfrom starlette.requests import Reque",
+    "step": 5
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/starlette/middleware/exceptions.py"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/starlette/middleware/exceptions.py:      1\tfrom __future__ import annotations      2\t      3\timport typing      4\t      5\tfrom starlette._exception_handler import (      6\t    ExceptionHandlers,      7\t    StatusHandlers,      8\t    wrap_app_handling_exceptions,      9\t)     10\tfrom starlette.exceptions import HTTPException, WebSocketException     ",
+    "step": 6
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor create /testbed/reproduce_issue.py --file_text 'import uvicorn\nfrom fastapi import FastAPI\nfrom starlette.middleware.base import BaseHTTPMiddleware\n\napp = FastAPI()\n\n\nclass MyExc(Exception):  # change to BaseException and then both exceptions are sent to stdout\n    ...\n\n\n@app.get("
+    },
+    "returned": "File created successfully at: /testbed/reproduce_issue.py",
+    "step": 7
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor str_replace /testbed/starlette/middleware/base.py   --old_str 'with send_stream:\n                    try:\n                        await self.app(scope, receive_or_disconnect, send_no_error)\n                    except Exception as exc:\n                        app_exc = exc' --new_s"
+    },
+    "returned": "The file /testbed/starlette/middleware/base.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/starlette/middleware/base.py:    134\t                    return    135\t    136\t            async def coro() -> None:    137\t                nonlocal app_exc    138\t    139\t                with send_stream:    140\t                    try:    141\t                        awai",
+    "step": 8
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && find . -name \"*.py\" -exec grep -l \"except Exception\" {} \\;"
+    },
+    "returned": "./starlette/middleware/errors.py ./starlette/endpoints.py ./starlette/_exception_handler.py ./venv/lib/python3.9/site-packages/backports/tarfile/__init__.py ./venv/lib/python3.9/site-packages/blackd/__init__.py ./venv/lib/python3.9/site-packages/keyring/backends/macOS/__init__.py ./venv/lib/python3.9/site-packages/keyring/cli.py ./venv/lib/python3.9/site-packages/keyring/backend.py ./venv/lib/pyth",
+    "step": 9
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/starlette/_exception_handler.py  --view_range 40 45"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/starlette/_exception_handler.py:     40\t     41\t        try:     42\t            await app(scope, receive, sender)     43\t        except Exception as exc:     44\t            handler = None     45",
+    "step": 10
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/starlette/middleware/errors.py  --view_range 164 170"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/starlette/middleware/errors.py:    164\t        try:    165\t            await self.app(scope, receive, _send)    166\t        except Exception as exc:    167\t            request = Request(scope)    168\t            if self.debug:    169\t                # In debug mode, return traceback responses.    170\t                response = self.debug_response(r",
+    "step": 11
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/starlette/endpoints.py"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/starlette/endpoints.py:      1\tfrom __future__ import annotations      2\t      3\timport json      4\timport typing      5\t      6\tfrom starlette import status      7\tfrom starlette._utils import is_async_callable      8\tfrom starlette.concurrency import run_in_threadpool      9\tfrom starlette.exceptions import HTTPException     10\tfrom starlette.req",
+    "step": 12
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor create /testbed/test_fix.py --file_text 'import subprocess\nimport time\nimport requests\nimport threading\nimport sys\n\ndef test_exception_handling():\n    \"\"\"Test that both Exception and BaseException subclasses are properly logged when middleware is added\"\"\"\n    \n    # Start the serv"
+    },
+    "returned": "File created successfully at: /testbed/test_fix.py",
+    "step": 13
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && python test_fix.py"
+    },
+    "returned": "Traceback (most recent call last):   File \"/testbed/test_fix.py\", line 3, in <module>     import requests ModuleNotFoundError: No module named 'requests'",
+    "step": 14
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor str_replace /testbed/test_fix.py   --old_str 'import subprocess\nimport time\nimport requests\nimport threading\nimport sys\n\ndef test_exception_handling():\n    \"\"\"Test that both Exception and BaseException subclasses are properly logged when middleware is added\"\"\"\n    \n    # Start the"
+    },
+    "returned": "The file /testbed/test_fix.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_fix.py:      1\t\"\"\"      2\tTest script to verify the fix for the middleware exception handling issue.      3\t      4\tThis script demonstrates the issue and shows that the fix works by:      5\t1. Creating a simple FastAPI app with the same structure as the issue      6\t2. Running it and",
+    "step": 15
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor create /testbed/FIX_SUMMARY.md --file_text '# Fix for Middleware Exception Handling Regression\n\n## Issue Description\nWhen `BaseHTTPMiddleware` is added to a FastAPI app, exceptions raised in mounted sub-apps that inherit from `Exception` were being silently handled (no traceback i"
+    },
+    "returned": "File created successfully at: /testbed/FIX_SUMMARY.md",
+    "step": 16
+  },
+  {
+    "tool": "str_replace_editor",
+    "args": {
+      "command": "str_replace_editor view /testbed/starlette/middleware/base.py  --view_range 150 170"
+    },
+    "returned": "Here's the result of running `cat -n` on /testbed/starlette/middleware/base.py:    150\t                if message[\"type\"] == \"http.response.debug\" and info is not None:    151\t                    message = await recv_stream.receive()    152\t            except anyio.EndOfStream:    153\t                if app_exc is not None:    154\t                    raise app_exc    155\t                raise Runt",
+    "step": 17
+  },
+  {
+    "tool": "cd",
+    "args": {
+      "command": "cd /testbed && rm reproduce_issue.py test_fix.py"
+    },
+    "returned": "",
+    "step": 18
+  },
+  {
+    "tool": "submit",
+    "args": {
+      "command": "submit"
+    },
+    "returned": "diff --git a/FIX_SUMMARY.md b/FIX_SUMMARY.md new file mode 100644 index 0000000..49018ad --- /dev/null +++ b/FIX_SUMMARY.md @@ -0,0 +1,63 @@ +# Fix for Middleware Exception Handling Regression + +## Issue Description +When `BaseHTTPMiddleware` is added to a FastAPI app, exceptions raised in mounted sub-apps that inherit from `Exception` were being silently handled (no traceback in console), while ",
+    "step": 19
+  }
+]

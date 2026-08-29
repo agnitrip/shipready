@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+title: >-
+  shipready: rubric-based ship-readiness evals for AI agents
+message: >-
+  If you use shipready or cite the calibration study, please
+  cite it using the metadata below.
+type: software
+authors:
+  - given-names: Agni
+    family-names: Tripathi
+    # orcid: 'https://orcid.org/0000-0000-0000-0000'  # fill in before archiving
+repository-code: 'https://github.com/agnitrip/shipready'
+license: MIT
+version: 0.2.0
+date-released: '2026-06-16'
+keywords:
+  - llm
+  - agents
+  - evaluation
+  - eval
+  - rubric
+  - process-eval
+  - claude
+references:
+  - type: report
+    title: >-
+      Grading an Agent's Process, Not Just Its Outcome: A Blind
+      Calibration Study on SWE-bench-Live
+    authors:
+      - given-names: Agni
+        family-names: Tripathi
+    year: 2026
+    notes: >-
+      shipready technical report v1.0. Blind calibration of process
+      eval against SWE-bench-Live leaderboard outcomes. See
+      docs/calibration-study.md.

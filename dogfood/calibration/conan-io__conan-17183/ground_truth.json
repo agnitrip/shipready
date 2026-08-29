@@ -1,0 +1,12 @@
+{
+  "instance_id": "conan-io__conan-17183",
+  "resolved": true,
+  "fail_to_pass": {
+    "success": 1,
+    "failure": 0
+  },
+  "pass_to_pass": {
+    "success": 4058,
+    "failure": 0
+  }
+}
