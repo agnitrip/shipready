@@ -21,7 +21,8 @@ Input shape (verified against the real files, both sources share it):
 SWE-bench-Live adds per-step "query" and "extra_info" keys that we ignore.
 
 Output (written into --out-dir):
-  tool_calls.json   list of {tool, args, returned, step}
+  tool_calls.json   list of {tool, args, returned, step}; edit commands carry
+                    old_str / new_str as separate args fields
   reasoning.txt     "Step N: <thought>" blocks joined by blank lines
   output.txt        the final patch, from info.submission
   ground_truth.json optional, only when a sibling report.json is present
@@ -33,16 +34,23 @@ Usage:
 import argparse
 import json
 import os
+import shlex
 import sys
 
-# Truncation caps. These keep the grader prompt bounded while preserving the
-# action, tool output, and reasoning signal the criteria are judged against.
-# Derived from the existing hand-converted files. The hand conversions used
-# slightly tighter caps on one of the two sources; these are the looser of the
-# two so no grading signal is lost.
+# Truncation caps keep the grader prompt bounded. Every cap leaves a visible
+# marker, so the grader can tell partial input from complete input.
+#
+# Edit commands get their own fields and caps. An edit command carries the old
+# text before the new text, so one cap on the whole command cut the new text
+# off entirely in 6 of the 8 calibration runs, and the grader saw lines being
+# removed with nothing replacing them. Splitting the fields fixes that.
 ACTION_CAP = 300
 RETURNED_CAP = 400
 THOUGHT_CAP = 600
+EDIT_FIELD_CAP = 2000
+
+EDIT_TOOLS = {"str_replace_editor", "edit"}
+EDIT_FLAGS = ("--old_str", "--new_str", "--file_text", "--insert_line", "--view_range")
 
 
 def load_traj(path):
@@ -56,24 +64,61 @@ def load_traj(path):
     return data["trajectory"], data["info"]
 
 
+def cap(text, limit):
+    """Return text cut to limit, with a marker saying how much was dropped."""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f" ...[truncated {len(text) - limit} chars]"
+
+
+def parse_edit_args(action):
+    """Split an edit command into its fields, or return None if it is not one.
+
+    Returns {"command": "<tool> <subcommand> <path>", "old_str": ..., ...} with
+    each text field capped on its own. Falls back to None when the command does
+    not parse as shell words, so the caller can cap it as a plain command.
+    """
+    if action.split(maxsplit=1)[0] not in EDIT_TOOLS or not any(f in action for f in EDIT_FLAGS):
+        return None
+    try:
+        words = shlex.split(action)
+    except ValueError:
+        return None
+    head, fields, i = [], {}, 0
+    while i < len(words):
+        word = words[i]
+        if word in EDIT_FLAGS and i + 1 < len(words):
+            fields[word[2:]] = cap(words[i + 1], EDIT_FIELD_CAP)
+            i += 2
+        else:
+            head.append(word)
+            i += 1
+    return {"command": cap(" ".join(head), ACTION_CAP), **fields}
+
+
 def build_tool_calls(trajectory):
     """Map each trajectory step to a {tool, args, returned, step} record.
 
-    tool is the first whitespace token of the shell action. args.command is the
-    full action, capped. returned is the observation with newlines flattened to
-    spaces so each tool result stays on one line, capped. Carriage returns are
-    left as-is to match the source observations.
+    tool is the first whitespace token of the shell action. For edit commands,
+    args holds the command head plus old_str, new_str and the other edit fields
+    as separate, separately capped values. For any other action, args.command
+    is the full action, capped. returned is the observation with newlines
+    flattened to spaces so each tool result stays on one line, capped.
+    Carriage returns are left as-is to match the source observations.
     """
     tool_calls = []
     for i, step in enumerate(trajectory, start=1):
         action = (step.get("action") or "").strip()
         observation = (step.get("observation") or "").strip()
         tool = action.split()[0] if action else "noop"
-        returned = observation[:RETURNED_CAP].replace("\n", " ")
+        returned = cap(observation, RETURNED_CAP).replace("\n", " ")
+        args = parse_edit_args(action) if action else None
+        if args is None:
+            args = {"command": cap(action, ACTION_CAP)}
         tool_calls.append(
             {
                 "tool": tool,
-                "args": {"command": action[:ACTION_CAP]},
+                "args": args,
                 "returned": returned,
                 "step": i,
             }
@@ -91,7 +136,7 @@ def build_reasoning(trajectory):
     for i, step in enumerate(trajectory, start=1):
         thought = (step.get("thought") or "").strip()
         if thought:
-            blocks.append(f"Step {i}: {thought[:THOUGHT_CAP]}")
+            blocks.append(f"Step {i}: {cap(thought, THOUGHT_CAP)}")
     return "\n\n".join(blocks)
 
 
