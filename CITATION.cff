@@ -31,6 +31,6 @@ references:
         family-names: Tripathi
     year: 2026
     notes: >-
-      shipready technical report v1.0. Blind calibration of process
+      shipready technical report v1.1. Blind calibration of process
       eval against SWE-bench-Live leaderboard outcomes. See
       docs/calibration-study.md.

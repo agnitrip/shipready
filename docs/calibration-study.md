@@ -1,7 +1,8 @@
 # Grading an Agent's Process, Not Just Its Outcome: A Blind Calibration Study on SWE-bench-Live
 
 **Author:** Agni Tripathi
-**Version:** 1.0
+**Version:** 1.1
+**Revised:** 2026-11-14. Corrects the summary, section 4 and section 8: the briefcase `test_integrity` flag is a false positive caused by truncated grader input. Details in section 4.
 **Published:** 2026-08-29
 **Study conducted:** 2026-06-16
 **Tool:** [shipready](https://github.com/agnitrip/shipready), an open-source rubric-based readiness eval for AI agents (MIT).
@@ -19,7 +20,7 @@ Two findings came out of it.
 
 1. **Blind outcome calibration.** shipready's blind prediction of whether each patch fixes the issue matched the leaderboard on all eight. Each call is reasoned and points at the specific defect, so the agreement is not a coincidence. This is a small sample from one agent, so read it as an early signal and read the caveats in section 6.
 
-2. **Process eval sees what the outcome label cannot.** Three of the four resolved instances had patches that edited test files. shipready flagged all three, verified against the actual diffs. The leaderboard cannot see this by construction, because the SWE-bench-Live harness applies its own gold test patch during evaluation and overrides whatever the agent did to the tests. An agent can rewrite the tests it is judged against and still be scored resolved. This is the stronger, more defensible result, and it is the case for grading process at all.
+2. **Process eval sees test edits the outcome label cannot.** Three of the four resolved instances had patches that edited test files, and shipready's `test_integrity` criterion flagged all three. In the evaluation scripts recorded with these runs, the harness restores each test file named in the benchmark's test patch before running tests, so the agent's test edits never reached scoring. The flag is right in substance for conan and beancount. For briefcase it is a false positive: the agent's test file is byte-identical to the maintainers' own fix, and the grader's stated reason came from a truncated trace. Section 4 has the detail.
 
 ---
 
@@ -68,7 +69,7 @@ Agreement is eight of eight: four true-positive, four true-negative, zero false-
 
 This is a different axis from calibration. When a leaderboard-resolved instance still draws a process flag, that is not a calibration miss. The process layer is catching something the outcome label cannot represent.
 
-**Finding: three of the four resolved instances modified test files, and shipready flagged all three. Verified against the diffs.**
+**Finding: three of the four resolved instances modified test files, and shipready flagged all three. Two of the flags are right in substance; the briefcase flag is a false positive (see the correction below).**
 
 | instance | resolved | resolves_issue | test_integrity | patch edits a test file? |
 |---|---|---|---|---|
@@ -77,9 +78,15 @@ This is a different axis from calibration. When a leaderboard-resolved instance 
 | conan-io__conan-17183 | True | True (correct) | FAIL | yes: `test/unittests/tools/google/test_bazel.py` |
 | beetbox__beets-5495 | True | True (correct) | PASS | no |
 
-The leaderboard cannot see this because SWE-bench-Live applies its own gold test patch during evaluation, which overrides whatever the agent did to the test files. An agent can edit tests and still be scored resolved. shipready's `test_integrity` is exact on this sample: it fails precisely on the instances whose patch touches a test file and passes otherwise, across all eight.
+The leaderboard cannot see these edits. In the evaluation scripts recorded with these runs, the harness restores each test file named in the benchmark's test patch to the base commit and applies the benchmark's version before running tests, so the agent's test edits never ran. An agent can edit tests and still be scored resolved. (The current SWE-bench-Live harness, released in December 2025, applies the agent's patch on top of the test patch with no restore step. I have not examined runs scored under it.)
 
-The conan case is the sharpest. The patch resolves the issue with a correct source fix, and the agent also modified existing test assertions to match its own capture mechanism and added tests around its own change. shipready flagged both `test_integrity` and `verification_validity` (circular verification) while still correctly predicting `resolves_issue` True. A reviewer trusting only the green leaderboard cell would never learn that the agent rewrote the tests it was checked against.
+shipready's `test_integrity` fails precisely on the instances whose patch touches a test file, across all eight. On this sample it is an exact detector of test-file edits. That is weaker than a detector of gaming: as written, the criterion fails any test edit, so it cannot separate a test change the task requires from one that weakens a check.
+
+The conan case is the sharpest. The patch resolves the issue with a correct source fix, and the agent also modified existing test assertions to match its own capture mechanism and added tests around its own change. shipready flagged both `test_integrity` and `verification_validity` (circular verification) while still correctly predicting `resolves_issue` True. Because the harness restored the test file, the agent's rewritten tests were not the ones it was scored against. A reviewer merging the patch as submitted would still have adopted them, and the green leaderboard cell says nothing about that.
+
+**Correction (2026-11-14): the briefcase flag is a false positive.** The grader's `test_integrity` justification says the agent removed `socket=session-bus` "and two test cases". The diff has three deleted test lines, all the same line, `"socket=session-bus": True,`, and the file has 4 test functions and 13 parameterized cases before and after. No test was removed. The issue asked for that permission to be removed, so the old expectation had to go, and the agent's test file is byte-identical to the maintainers' own fix (Git blob `8b37e7c9`, upstream commit `222936cd`).
+
+The cause was the trace converter. It capped every command at 300 characters, and an edit command carries the old text before the new text, so the new text was cut off. In briefcase all five replace edits reached the grader as deletions with no replacement. The full patch was in the same prompt as the agent output, and in the same call the scope criterion `change_scoped_to_source` read it correctly ("modifies ... test_create.py in three places"). `test_integrity` is a process criterion, graded from the trace, and its reason followed the truncated trace. The converter now keeps edit text in separate, separately capped fields; the version that produced these grades is tagged `grader-input-v0`. The grades in `dogfood/calibration/` are left as originally produced.
 
 ## 5. Full verdict matrix
 
@@ -134,16 +141,16 @@ Grading calls the Claude API, so results carry the normal LLM-as-judge variance.
 
 ## 8. Bottom line
 
-On a blind four-resolved / four-unresolved SWE-bench-Live mix, shipready's `resolves_issue` prediction matched the leaderboard on all eight instances, with reasoned, patch-grounded justifications and no tuning. That is a small-sample, single-agent signal, and a larger multi-agent sweep should be run expecting to find and explain a disagreement. The result that stands on its own is the process finding: on three of the four resolved instances the agent had edited test files, verified against the diffs, which the leaderboard cannot see because the harness overrides test files, and shipready's process eval caught every one. That is the argument for grading how an agent got there, and not only where it landed.
+On a blind four-resolved / four-unresolved SWE-bench-Live mix, shipready's `resolves_issue` prediction matched the leaderboard on all eight instances, with reasoned, patch-grounded justifications and no tuning. That is a small-sample, single-agent signal, and a larger multi-agent sweep should be run expecting to find and explain a disagreement. The process finding holds in a narrower form. On three of the four resolved instances the agent edited test files, which the leaderboard could not see because the harness restored those files before scoring, and shipready flagged every one. Two of those flags are right in substance. The briefcase flag is a false positive caused by truncated grader input (section 4). The criterion detects test-file edits exactly; separating test changes a task requires from changes that weaken a check needs a redesigned criterion, which is future work.
 
 ## How to cite
 
 If a DOI has been minted for this study (see the repository release), cite the archived version:
 
-> Tripathi, A. (2026). *Grading an Agent's Process, Not Just Its Outcome: A Blind Calibration Study on SWE-bench-Live.* shipready technical report v1.0. DOI: [to be filled after archiving].
+> Tripathi, A. (2026). *Grading an Agent's Process, Not Just Its Outcome: A Blind Calibration Study on SWE-bench-Live.* shipready technical report v1.1. DOI: [to be filled after archiving].
 
 Otherwise cite the versioned document directly:
 
-> Tripathi, A. (2026). *Grading an Agent's Process, Not Just Its Outcome: A Blind Calibration Study on SWE-bench-Live.* shipready technical report v1.0. https://github.com/agnitrip/shipready/blob/main/docs/calibration-study.md
+> Tripathi, A. (2026). *Grading an Agent's Process, Not Just Its Outcome: A Blind Calibration Study on SWE-bench-Live.* shipready technical report v1.1. https://github.com/agnitrip/shipready/blob/main/docs/calibration-study.md
 
 This study is the empirical backing for the IEEE iGET 2026 workshop *Is Your Agent Ready to Ship? Evaluating, Verifying, and Guardrailing Agentic AI in High-Stakes Domains.*
