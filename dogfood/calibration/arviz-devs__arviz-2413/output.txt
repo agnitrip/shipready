@@ -1,0 +1,296 @@
+diff --git a/arviz/plots/hdiplot.py b/arviz/plots/hdiplot.py
+index 196a1f53..ac0ef49b 100644
+--- a/arviz/plots/hdiplot.py
++++ b/arviz/plots/hdiplot.py
+@@ -1,6 +1,7 @@
+ """Plot highest density intervals for regression data."""
+ 
+ import warnings
++import pandas as pd
+ 
+ import numpy as np
+ from scipy.interpolate import griddata
+@@ -52,6 +53,8 @@ def plot_hdi(
+     smooth : boolean, default True
+         If True the result will be smoothed by first computing a linear interpolation of the data
+         over a regular grid and then applying the Savitzky-Golay filter to the interpolated data.
++        Note: Smoothing is not supported for categorical or string x-values. Use smooth=False for
++        categorical data or convert x to numeric values first.
+     smooth_kwargs : dict, optional
+         Additional keywords modifying the Savitzky-Golay filter. See
+         :func:`scipy:scipy.signal.savgol_filter` for details.
+@@ -172,6 +175,18 @@ def plot_hdi(
+         if isinstance(x[0], np.datetime64):
+             raise TypeError("Cannot deal with x as type datetime. Recommend setting smooth=False.")
+ 
++        # Check for categorical or string data that can't be used with smoothing
++        if hasattr(x, 'dtype') and isinstance(x.dtype, pd.CategoricalDtype):
++            raise TypeError(
++                "Cannot deal with x as categorical data when smooth=True. "
++                "Recommend setting smooth=False or converting x to numeric values."
++            )
++        elif isinstance(x[0], str) or (hasattr(x, 'dtype') and np.issubdtype(x.dtype, np.dtype('U').type)):
++            raise TypeError(
++                "Cannot deal with x as string data when smooth=True. "
++                "Recommend setting smooth=False or converting x to numeric values."
++            )
++
+         if smooth_kwargs is None:
+             smooth_kwargs = {}
+         smooth_kwargs.setdefault("window_length", 55)
+@@ -181,7 +196,17 @@ def plot_hdi(
+         hdi_interp = griddata(x, hdi_data, x_data)
+         y_data = savgol_filter(hdi_interp, axis=0, **smooth_kwargs)
+     else:
+-        idx = np.argsort(x)
++        # Handle categorical data properly by respecting category order
++        if hasattr(x, 'dtype') and isinstance(x.dtype, pd.CategoricalDtype):
++            # Get the categories in their original order
++            categories = x.dtype.categories
++            # Create an index array sorted by category order
++            idx = np.argsort([x.dtype.categories.get_loc(val) for val in x.ravel()])
++            idx = idx.reshape(x.shape)
++        else:
++            # For non-categorical data, use regular sorting
++            idx = np.argsort(x)
++        
+         x_data = x[idx]
+         y_data = hdi_data[idx]
+ 
+diff --git a/data_plot.png b/data_plot.png
+new file mode 100644
+index 00000000..133552a6
+Binary files /dev/null and b/data_plot.png differ
+diff --git a/final_reproduce.py b/final_reproduce.py
+new file mode 100644
+index 00000000..42b6e498
+--- /dev/null
++++ b/final_reproduce.py
+@@ -0,0 +1,52 @@
++import arviz as az
++import numpy as np
++import pandas as pd
++import matplotlib.pyplot as plt
++
++# Create the exact data structure from the PR
++np.random.seed(42)
++x = ['A', 'B', 'C']
++yA = np.random.normal(loc=5, scale=3, size=30)
++yB = np.random.normal(loc=2, scale=4, size=30)
++yC = np.random.normal(loc=7, scale=1.8, size=30)
++
++# Create DataFrame with categorical group
++data = pd.DataFrame({
++    'y': np.concatenate([yA, yB, yC]),
++    'group': np.repeat(x, repeats=30)
++})
++data['group'] = data['group'].astype('category')
++
++# Create y_mu with the correct dimensions for plot_hdi
++# (chain, draw, sample) where sample corresponds to each data point
++y_mu = np.random.randn(2, 50, 90)  # 2 chains, 50 draws, 90 samples
++
++# Get group labels in the same order as the data
++group = data['group'].values
++
++# Calculate HDI manually to match what would happen in the PR
++hdi_data = az.hdi(y_mu, hdi_prob=0.94)
++
++# Now let's try to reproduce the exact error from the PR
++# The error should be: UFuncTypeError: ufunc 'multiply' did not contain a loop with signature matching types (dtype('<U1'), dtype('float64')) -> None
++try:
++    # This should fail with the UFuncTypeError when smooth=True (default)
++    az.plot_hdi(x=group, y=hdi_data.T)
++except Exception as e:
++    print(f"Error type: {type(e).__name__}")
++    print(f"Error message: {e}")
++    import traceback
++    traceback.print_exc()
++
++# Let's also check what happens with smooth=False
++try:
++    plt.figure(figsize=(10, 6))
++    az.plot_hdi(x=group, y=hdi_data.T, smooth=False)
++    plt.title('plot_hdi with categorical x and smooth=False')
++    plt.savefig('hdi_categorical_smooth_false.png')
++    plt.close()
++    print("\nPlot saved with smooth=False")
++except Exception as e:
++    print(f"\nError with smooth=False: {type(e).__name__}: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/hdi_categorical_smooth_false.png b/hdi_categorical_smooth_false.png
+new file mode 100644
+index 00000000..55170853
+Binary files /dev/null and b/hdi_categorical_smooth_false.png differ
+diff --git a/pr_reproduce.py b/pr_reproduce.py
+new file mode 100644
+index 00000000..eda537f6
+--- /dev/null
++++ b/pr_reproduce.py
+@@ -0,0 +1,55 @@
++import arviz as az
++import numpy as np
++import pandas as pd
++import matplotlib.pyplot as plt
++
++# Simulate data exactly as in the PR
++np.random.seed(42)
++x = ['A', 'B', 'C']
++yA = np.random.normal(loc=5, scale=3, size=30)
++yB = np.random.normal(loc=2, scale=4, size=30)
++yC = np.random.normal(loc=7, scale=1.8, size=30)
++
++# Create a DataFrame
++data = pd.DataFrame({
++    'y': np.concatenate([yA, yB, yC]),
++    'group': np.repeat(x, repeats=30)
++})
++data['group'] = data['group'].astype('category')
++
++# Create y_mu with the right dimensions for plot_hdi
++# We'll use (chain, draw, sample) dimensions
++y_mu = np.random.randn(2, 50, 90)  # 2 chains, 50 draws, 90 samples
++
++# Get the group labels
++group = data.loc[:, "group"].values
++
++# Let's first see what happens with the HDI calculation
++hdi_data = az.hdi(y_mu, hdi_prob=0.94)
++print(f"hdi_data shape: {hdi_data.shape}")
++print(f"group shape: {group.shape}")
++
++# Now try to plot with smooth=True (this should give the UFuncTypeError mentioned in the PR)
++try:
++    plt.figure(figsize=(10, 6))
++    az.plot_hdi(x=group, y=hdi_data)
++    plt.title('With hdi_data and smooth=True (should fail with UFuncTypeError)')
++    plt.savefig('hdi_categorical_error.png')
++    plt.close()
++except Exception as e:
++    print(f"Error: {type(e).__name__}: {e}")
++    import traceback
++    traceback.print_exc()
++
++# Try with smooth=False
++try:
++    plt.figure(figsize=(10, 6))
++    az.plot_hdi(x=group, y=hdi_data, smooth=False)
++    plt.title('With hdi_data and smooth=False (may not look right)')
++    plt.savefig('hdi_categorical_smooth_false.png')
++    plt.close()
++    print("Plot saved with smooth=False")
++except Exception as e:
++    print(f"Error with smooth=False: {type(e).__name__}: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 00000000..1c0d6073
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,71 @@
++import arviz as az
++import numpy as np
++import pandas as pd
++import matplotlib.pyplot as plt
++
++# Simulate data exactly as in the PR
++np.random.seed(42)
++x = ['A', 'B', 'C']
++yA = np.random.normal(loc=5, scale=3, size=30)
++yB = np.random.normal(loc=2, scale=4, size=30)
++yC = np.random.normal(loc=7, scale=1.8, size=30)
++
++# Create a DataFrame
++data = pd.DataFrame({
++    'y': np.concatenate([yA, yB, yC]),
++    'group': np.repeat(x, repeats=30)
++})
++data['group'] = data['group'].astype('category')
++
++# Plot the data with matplotlib (without seaborn)
++plt.figure(figsize=(8, 6))
++# Create boxplot manually
++groups = data['group'].unique()
++for i, group in enumerate(groups):
++    y_values = data[data['group'] == group]['y']
++    plt.boxplot(y_values, positions=[i])
++    # Add jittered points
++    jitter = np.random.normal(0, 0.05, size=len(y_values))
++    plt.scatter(i + jitter, y_values, color='black', alpha=0.5)
++
++plt.xticks(range(len(groups)), groups)
++plt.title('Distribution of y across groups')
++plt.xlabel('Group')
++plt.ylabel('y')
++plt.savefig('data_plot.png')
++plt.close()
++
++# Create y_mu with dimensions that match the group labels
++# 30 samples per group, 3 groups = 90 total
++# We'll use (draw, sample) dimensions to match what az.extract would return
++y_mu = np.random.randn(50, 90)  # 50 draws, 90 samples
++
++# Get the group labels in order (same order as in the data)
++group = data.loc[:, "group"].values
++
++# Try with smooth=True (default)
++try:
++    plt.figure(figsize=(10, 6))
++    plt.subplot(1, 2, 1)
++    az.plot_hdi(x=group, y=y_mu.T)
++    plt.title('With smooth=True (should fail)')
++    
++except Exception as e:
++    print(f"Error with smooth=True: {type(e).__name__}: {e}")
++    import traceback
++    traceback.print_exc()
++
++# Try with smooth=False
++try:
++    plt.subplot(1, 2, 2)
++    az.plot_hdi(x=group, y=y_mu.T, smooth=False)
++    plt.title('With smooth=False (may not look right)')
++    plt.tight_layout()
++    plt.savefig('hdi_categorical_test.png')
++    plt.close()
++    print("Plot saved with smooth=False")
++    
++except Exception as e:
++    print(f"Error with smooth=False: {type(e).__name__}: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/simple_reproduce.py b/simple_reproduce.py
+new file mode 100644
+index 00000000..3c6a8b05
+--- /dev/null
++++ b/simple_reproduce.py
+@@ -0,0 +1,23 @@
++import arviz as az
++import numpy as np
++import pandas as pd
++
++# Create categorical data
++x = pd.Categorical(['A', 'B', 'C'] * 10)
++y = np.random.randn(30, 2)  # 30 samples, 2 HDI values (lower, upper)
++
++# Try to plot with smooth=True (default)
++try:
++    az.plot_hdi(x=x, y=y)
++except Exception as e:
++    print(f"Error with smooth=True: {type(e).__name__}: {e}")
++    import traceback
++    traceback.print_exc()
++
++# Try to plot with smooth=False
++try:
++    az.plot_hdi(x=x, y=y, smooth=False)
++except Exception as e:
++    print(f"Error with smooth=False: {type(e).__name__}: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file

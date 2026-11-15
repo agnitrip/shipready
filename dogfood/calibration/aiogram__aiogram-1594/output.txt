@@ -1,0 +1,47 @@
+diff --git a/CHANGES/1590.feature.rst b/CHANGES/1590.feature.rst
+new file mode 100644
+index 00000000..6769ea9b
+--- /dev/null
++++ b/CHANGES/1590.feature.rst
+@@ -0,0 +1,11 @@
++Added ``get_value(key: str)`` method to ``FSMContext`` class for direct access to stored values.
++This method allows retrieving a single value from FSM context in one line instead of two:
++
++.. code-block:: python
++
++    # Before
++    data = await state.get_data()
++    name = data["name"]
++
++    # After  
++    name = await state.get_value("name")
+\ No newline at end of file
+diff --git a/aiogram/fsm/context.py b/aiogram/fsm/context.py
+index 53a8ea46..416ed35b 100644
+--- a/aiogram/fsm/context.py
++++ b/aiogram/fsm/context.py
+@@ -19,6 +19,9 @@ class FSMContext:
+ 
+     async def get_data(self) -> Dict[str, Any]:
+         return await self.storage.get_data(key=self.key)
++        
++    async def get_value(self, key: str) -> Any:
++        return (await self.get_data())[key]
+ 
+     async def update_data(
+         self, data: Optional[Dict[str, Any]] = None, **kwargs: Any
+diff --git a/tests/test_fsm/test_context.py b/tests/test_fsm/test_context.py
+index f0c29911..572b3299 100644
+--- a/tests/test_fsm/test_context.py
++++ b/tests/test_fsm/test_context.py
+@@ -43,6 +43,10 @@ class TestFSMContext:
+ 
+         await state.update_data({"key": "value"})
+         assert await state.get_data() == {"foo": "bar", "key": "value"}
++        
++        # Test get_value method
++        assert await state.get_value("foo") == "bar"
++        assert await state.get_value("key") == "value"
+ 
+         await state.clear()
+         assert await state.get_state() is None

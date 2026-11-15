@@ -1,0 +1,19 @@
+diff --git a/loguru/_datetime.py b/loguru/_datetime.py
+index 52fffc3..f10c8e8 100644
+--- a/loguru/_datetime.py
++++ b/loguru/_datetime.py
+@@ -156,6 +156,14 @@ def aware_now():
+         seconds = offset.total_seconds()
+         zone = strftime("%Z")
+ 
++    # Clamp the offset to the valid range for timezone (strictly between -24h and +24h)
++    # This handles cases where system clock is set to a future date
++    max_offset_seconds = 24 * 3600 - 1  # Strictly less than 24 hours
++    if seconds > max_offset_seconds:
++        seconds = max_offset_seconds
++    elif seconds < -max_offset_seconds:
++        seconds = -max_offset_seconds
++
+     tzinfo = timezone(timedelta(seconds=seconds), zone)
+ 
+     return datetime.combine(now.date(), now.time().replace(tzinfo=tzinfo))

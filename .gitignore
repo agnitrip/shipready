@@ -32,6 +32,9 @@ dogfood/**/*.traj
 dogfood/**/*.parquet
 dogfood/**/*.zip
 dogfood/**/report.json
+# Per-run scratch capture (stdout/stderr from converter and grader runs).
+dogfood/**/.converr
+dogfood/**/.graderr
 # WebSTAR raw trajectory dumps (the unzipped ShareGPT files; only the converted
 # files and *_step_scores.json are kept). Add a similar line for any new raw
 # source whose files are not one of the kept names above.

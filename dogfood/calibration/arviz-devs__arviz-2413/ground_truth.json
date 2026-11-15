@@ -1,0 +1,12 @@
+{
+  "instance_id": "arviz-devs__arviz-2413",
+  "resolved": false,
+  "fail_to_pass": {
+    "success": 0,
+    "failure": 1
+  },
+  "pass_to_pass": {
+    "success": 3767,
+    "failure": 0
+  }
+}

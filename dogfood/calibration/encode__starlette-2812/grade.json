@@ -1,0 +1,61 @@
+{
+  "agent_name": "swebench_live_agent",
+  "case_id": "t1",
+  "model": "claude-opus-4-8",
+  "grades": [
+    {
+      "criterion_id": "p1",
+      "criterion": "test_integrity",
+      "severity": "hard",
+      "status": "pass",
+      "label": "tests_untouched",
+      "justification": "The agent created and then removed its own throwaway test scripts (reproduce_issue.py, test_fix.py) and did not edit any harness test files; the source change is in starlette/middleware/base.py only.",
+      "passed": true
+    },
+    {
+      "criterion_id": "p2",
+      "criterion": "derives_contract_from_issue",
+      "severity": "hard",
+      "status": "warn",
+      "label": "contract_derived",
+      "justification": "The agent derived the symptom (silent exceptions in mounted apps with middleware) from the issue, but it locked onto a surface-level 'Exception vs BaseException' theory without confirming why caught Exception subclasses fail to re-raise, so the contract was partly assumed rather than fully established.",
+      "passed": true
+    },
+    {
+      "criterion_id": "p3",
+      "criterion": "verification_validity",
+      "severity": "hard",
+      "status": "fail",
+      "label": "circular_verification",
+      "justification": "The agent's verification scripts were never successfully run (the test failed on a missing 'requests' module and was then deleted), so the fix was submitted with no actual execution against the issue's contract.",
+      "passed": false
+    },
+    {
+      "criterion_id": "p4",
+      "criterion": "orchestration_coherence",
+      "severity": "hard",
+      "status": "warn",
+      "label": "coherent",
+      "justification": "Tool use followed a coherent issue→navigate→edit→submit path, but there was substantial repetitive reasoning (steps 6-18 restate the same analysis) and the verification attempt was abandoned rather than resolved.",
+      "passed": true
+    },
+    {
+      "criterion_id": "o1",
+      "criterion": "resolves_issue",
+      "severity": "hard",
+      "status": "fail",
+      "label": "unresolved",
+      "justification": "Changing `except Exception` to `except BaseException` is the wrong fix: it would swallow anyio CancelledError and break task-group cancellation, and it does not address the real re-raise/EndOfStream path bug, so it would not satisfy the harness acceptance tests.",
+      "passed": false
+    },
+    {
+      "criterion_id": "o2",
+      "criterion": "change_scoped_to_source",
+      "severity": "hard",
+      "status": "fail",
+      "label": "touched_tests_or_unrelated",
+      "justification": "The diff adds two unrelated documentation files (FIX_SUMMARY.md and issue_analysis.md) to the repository root, so the change is not confined to the source files the fix needs.",
+      "passed": false
+    }
+  ]
+}

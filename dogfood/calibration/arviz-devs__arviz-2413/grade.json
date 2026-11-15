@@ -1,0 +1,61 @@
+{
+  "agent_name": "swebench_live_agent",
+  "case_id": "t1",
+  "model": "claude-opus-4-8",
+  "grades": [
+    {
+      "criterion_id": "p1",
+      "criterion": "test_integrity",
+      "severity": "hard",
+      "status": "pass",
+      "label": "tests_untouched",
+      "justification": "The agent viewed test files for reference (steps 15-18) and ran the existing plot_hdi tests but never edited any test file; all source edits are in hdiplot.py.",
+      "passed": true
+    },
+    {
+      "criterion_id": "p2",
+      "criterion": "derives_contract_from_issue",
+      "severity": "hard",
+      "status": "warn",
+      "label": "contract_derived",
+      "justification": "The agent derived that a clear TypeError should be raised for categorical x, but the issue's stated expected behavior was to mirror bambi's plot_predictions output (a working categorical plot), and the agent assumed raising an error plus smooth=False handling was the contract rather than confirming.",
+      "passed": true
+    },
+    {
+      "criterion_id": "p3",
+      "criterion": "verification_validity",
+      "severity": "hard",
+      "status": "warn",
+      "label": "valid_verification",
+      "justification": "The agent ran the existing test suite (which passed) and authored its own test confirming a TypeError is raised, but that verification only checks its own assumption (error-raising) rather than the issue's real acceptance test for categorical plotting support.",
+      "passed": true
+    },
+    {
+      "criterion_id": "p4",
+      "criterion": "orchestration_coherence",
+      "severity": "hard",
+      "status": "pass",
+      "label": "coherent",
+      "justification": "The trace follows a coherent path from issue analysis to code navigation to implementation and verification, though it spent several steps debugging its own test shape errors before succeeding.",
+      "passed": true
+    },
+    {
+      "criterion_id": "o1",
+      "criterion": "resolves_issue",
+      "severity": "hard",
+      "status": "fail",
+      "label": "unresolved",
+      "justification": "The issue's expected behavior is to support categorical x and mirror bambi's plot_predictions output; the patch only raises a TypeError when smooth=True and reorders for smooth=False, which likely does not satisfy the harness's acceptance test for actual categorical support.",
+      "passed": false
+    },
+    {
+      "criterion_id": "o2",
+      "criterion": "change_scoped_to_source",
+      "severity": "hard",
+      "status": "fail",
+      "label": "touched_tests_or_unrelated",
+      "justification": "The diff includes multiple committed reproduction scripts (final_reproduce.py, pr_reproduce.py, reproduce_issue.py, simple_reproduce.py) and two binary PNG files, which are unrelated artifacts that should not be in the patch.",
+      "passed": false
+    }
+  ]
+}
